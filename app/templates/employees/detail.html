@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block title %}{{ emp.emp_name }} 직원 정보{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ emp.emp_name }} <span class="muted small">{{ emp.emp_no }}</span></h1>
+  {% if is_self %}<div><a class="btn" href="{{ url_for('employees.edit_me') }}">내 정보 수정</a> {% if emp.emp_type=='DEV' %}<a class="btn secondary" href="{{ url_for('employees.my_skills') }}">보유 기술 관리</a>{% endif %}</div>{% endif %}</div>
+<div class="card"><div class="form-grid">
+  <div><span class="muted">직원 구분</span> · {{ '개발자' if emp.emp_type=='DEV' else '지원직' }}{% if emp.department %} ({{ {'MARKETING':'마케팅','MANAGEMENT':'경영관리','RND':'연구개발'}[emp.department] }}{% if emp.job_title %} · {{ emp.job_title }}{% endif %}){% endif %}</div>
+  <div><span class="muted">주민등록번호</span> · {{ emp.resident_reg_no if is_self else emp.rrn_masked }}</div>
+  <div><span class="muted">최종학력</span> · {{ emp.education_level }}</div>
+  <div><span class="muted">입사일</span> · {{ emp.hire_date }} <span class="muted small">({{ emp.status }})</span></div>
+  <div><span class="muted">이메일 / 연락처</span> · {{ emp.email or '-' }} / {{ emp.phone or '-' }}</div>
+  <div><span class="muted">계정</span> · {{ emp.login_id }} ({{ '경영진' if emp.auth_role=='EXECUTIVE' else '일반직원' }})</div>
+  {% if emp.emp_type=='DEV' %}
+  <div><span class="muted">기술등급</span> · <strong>{{ emp.skill_grade }}</strong>
+    {% if emp.recommended_grade != emp.skill_grade %}<span class="badge warn" title="경력 기준 산정 등급">경력 기준 {{ emp.recommended_grade }}</span>{% endif %}</div>
+  <div><span class="muted">총 경력</span> · {{ (emp.career_months // 12) }}년 {{ emp.career_months % 12 }}개월 <span class="muted small">(기산일 {{ emp.career_start_date }})</span></div>
+  {% endif %}
+</div>
+{% if is_executive and emp.emp_type=='DEV' %}
+<form method="post" action="{{ url_for('employees.change_grade', emp_id=emp.emp_id) }}" class="inline" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+  <div><label>기술등급 변경 (경영진)</label><select name="skill_grade">{% for g in grades %}<option {{ 'selected' if g==emp.skill_grade }}>{{ g }}</option>{% endfor %}</select></div>
+  <div style="flex:1"><label>변경 사유</label><input type="text" name="reason" placeholder="정기 기술등급 심사 승급"></div>
+  <button type="submit" class="secondary">변경</button>
+</form>{% endif %}
+</div>
+{% if emp.emp_type=='DEV' %}
+<h2>보유 기술 (Skill Set)</h2>
+<div class="card">{% if skills %}<table><thead><tr><th>분류</th><th>기술</th><th>숙련도</th><th class="right">사용 경력</th><th>최근 사용</th></tr></thead><tbody>
+{% for s in skills %}<tr><td class="muted">{{ s.category }}</td><td>{{ s.skill_name }}</td><td>{{ '★' * s.proficiency }}{{ '☆' * (5 - s.proficiency) }}</td><td class="right">{{ s.years_used }}년</td><td>{{ s.last_used_date or '-' }}</td></tr>{% endfor %}
+</tbody></table>{% else %}<p class="muted">등록된 기술이 없습니다.</p>{% endif %}</div>
+<h2>프로젝트 참여 이력 (경력) <span class="muted small">— 데모 시나리오 3</span></h2>
+<div class="card">{% if career %}<table><thead><tr><th>프로젝트</th><th>발주처</th><th>직무</th><th>투입 기간</th><th class="right">투입률</th><th>상태</th></tr></thead><tbody>
+{% for a in career %}<tr><td><a href="{{ url_for('projects.detail', project_id=a.project_id) }}">{{ a.project_code }} {{ a.project_name }}</a></td><td>{{ a.client_name }}</td><td>{{ a.role_name }}</td><td>{{ a.start_date }} ~ {{ a.end_date }}</td><td class="right">{{ a.participation_rate }}%</td><td><span class="badge {{ a.project_status }}">{{ a.project_status }}</span></td></tr>{% endfor %}
+</tbody></table>{% else %}<p class="muted">참여 이력이 없습니다.</p>{% endif %}</div>
+<h2>프로젝트 평가 종합</h2>
+<div class="card">{% if evals %}<table><thead><tr><th>프로젝트</th><th>종료일</th><th class="right">고객</th><th class="right">PM</th><th class="right">동료</th><th class="right">평가 수</th><th class="right">종합점수</th><th>등급</th></tr></thead><tbody>
+{% for r in evals %}<tr><td>{{ r.project_code }} {{ r.project_name }}</td><td>{{ r.end_date }}</td><td class="right">{{ r.customer_score or '-' }}</td><td class="right">{{ r.pm_score or '-' }}</td><td class="right">{{ r.peer_score or '-' }}</td><td class="right">{{ r.eval_count }}</td><td class="right"><strong>{{ r.weighted_score }}</strong></td><td><span class="badge {{ r.incentive_grade }}">{{ r.incentive_grade }}</span></td></tr>{% endfor %}
+</tbody></table>{% else %}<p class="muted">평가 결과가 없습니다.</p>{% endif %}</div>
+{% if history %}<h2>기술등급 변경 이력</h2><div class="card"><table><thead><tr><th>변경일시</th><th>변경</th><th>처리자</th><th>사유</th></tr></thead><tbody>
+{% for h in history %}<tr><td>{{ h.changed_at }}</td><td>{{ h.old_grade or '-' }} → <strong>{{ h.new_grade }}</strong></td><td>{{ h.changed_by_name or '-' }}</td><td>{{ h.reason or '' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endif %}
+{% endblock %}

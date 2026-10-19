@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}평가 결과{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>프로젝트 평가 결과 <span class="muted small">— 데모 시나리오 4</span></h1>
+<form method="get" class="inline"><select name="project_id" onchange="this.form.submit()"><option value="">전체 종료 프로젝트</option>{% for p in projects %}<option value="{{ p.project_id }}" {{ 'selected' if p.project_id==project_id }}>{{ p.project_code }} {{ p.project_name }}</option>{% endfor %}</select></form></div>
+<div class="card"><p class="muted small">종합점수 = 고객 40% + PM 40% + 동료 20% 가중 평균 (해당 유형 평가가 없으면 가중치 재배분) · 등급 S≥4.5 A≥4.0 B≥3.0 C</p>
+<table><thead><tr><th>프로젝트</th><th>사번</th><th>이름</th><th>등급</th><th class="right">고객</th><th class="right">PM</th><th class="right">동료</th><th class="right">평가 수</th><th class="right">종합</th><th>인센티브 등급</th></tr></thead><tbody>
+{% for r in rows %}<tr><td class="small">{{ r.project_code }} {{ r.project_name }}</td><td>{{ r.emp_no }}</td><td><a href="{{ url_for('employees.detail', emp_id=r.evaluatee_emp_id) }}">{{ r.emp_name }}</a></td><td>{{ r.skill_grade }}</td><td class="right">{{ r.customer_score or '-' }}</td><td class="right">{{ r.pm_score or '-' }}</td><td class="right">{{ r.peer_score or '-' }}</td><td class="right">{{ r.eval_count }}</td><td class="right"><strong>{{ r.weighted_score }}</strong></td><td><span class="badge {{ r.incentive_grade }}">{{ r.incentive_grade }}</span></td></tr>
+{% else %}<tr><td colspan="10" class="muted">평가 결과가 없습니다.</td></tr>{% endfor %}</tbody></table></div>
+{% if details %}<h2>평가 상세 ({{ details|length }}건)</h2>
+<div class="card"><table><thead><tr><th>피평가자</th><th>유형</th><th>평가자</th><th>상태</th><th class="right">업무</th><th class="right">소통</th><th class="right">평균</th><th>항목별 평가 내용</th></tr></thead><tbody>
+{% for d in details %}<tr><td>{{ d.evaluatee_name }}</td><td>{{ {'CUSTOMER':'고객','PM':'PM','PEER':'동료'}[d.eval_type] }}</td><td>{{ d.evaluator_name }}</td><td><span class="badge {{ d.status }}">{{ d.status }}</span></td><td class="right">{{ d.work_score or '-' }}</td><td class="right">{{ d.comm_score or '-' }}</td><td class="right">{{ d.avg_score or '-' }}</td><td class="small">{{ d.detail_text or '-' }}{% if d.overall_comment %}<br><span class="muted">총평: {{ d.overall_comment }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% endblock %}

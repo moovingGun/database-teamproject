@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SI-PMS{% endblock %} · SI-PMS</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('reports.index') }}">SI-PMS</a>
+  <nav>
+    {% if current_user %}
+      <a href="{{ url_for('reports.index') }}">대시보드</a>
+      <a href="{{ url_for('projects.index') }}">프로젝트</a>
+      <a href="{{ url_for('evaluations.tasks') }}">평가</a>
+      <a href="{{ url_for('employees.me') }}">내 정보</a>
+      {% if current_user.emp_type == 'DEV' %}<a href="{{ url_for('employees.my_skills') }}">보유 기술</a>{% endif %}
+      {% if is_executive %}
+        <span class="sep"></span>
+        <a href="{{ url_for('employees.search') }}">직원 검색</a>
+        <a href="{{ url_for('reports.staffing') }}">시점별 투입현황</a>
+        <a href="{{ url_for('reports.evaluations') }}">평가 결과</a>
+        <a href="{{ url_for('reports.incentive') }}">인센티브</a>
+        <a href="{{ url_for('projects.new') }}">+ 프로젝트 등록</a>
+      {% endif %}
+    {% endif %}
+  </nav>
+  <div class="user">
+    {% if current_user %}
+      <strong>{{ current_user.emp_name }}</strong> ({{ current_user.emp_no }}{% if is_executive %} · 경영진{% endif %})
+      <a href="{{ url_for('auth.logout') }}">로그아웃</a>
+    {% else %}
+      <a href="{{ url_for('auth.login') }}">로그인</a><a href="{{ url_for('auth.signup') }}">회원가입</a>
+    {% endif %}
+  </div>
+</header>
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<footer>Database Design Team Project · SI 프로젝트 인력·평가 관리 시스템 (SI-PMS)</footer>
+</body>
+</html>

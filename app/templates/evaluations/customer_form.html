@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}고객 평가서{% endblock %}
+{% block content %}
+<div class="card auth wide"><h1>프로젝트 고객 평가서</h1>
+<p><span class="muted">프로젝트</span> {{ anchor.project_code }} {{ anchor.project_name }} ({{ anchor.start_date }} ~ {{ anchor.end_date }})<br>
+<span class="muted">발주처 / 평가자</span> {{ anchor.client_name }} · <strong>{{ anchor.contact_name }}</strong> {{ anchor.position }}</p>
+{% if pending %}
+<p class="small muted">참여 직원 {{ pending|length }}명에 대해 항목별 평점(1~5점)과 평가 내용을 입력해 주세요. 제출 후에는 수정할 수 없습니다.</p>
+<form method="post">
+  {% for ev in pending %}
+  <div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px"><h3 style="margin:0 0 8px">{{ ev.emp_name }} <span class="muted small">({{ ev.roles }})</span></h3>
+    {% for it in items %}<div class="field"><label>{{ it.item_name }} <span class="muted">{{ it.description }}</span></label>
+      <div class="score">{% for s in range(1,6) %}<label><input type="radio" name="score_{{ ev.eval_id }}_{{ it.item_id }}" value="{{ s }}" required> {{ s }}점</label>{% endfor %}</div>
+      <input type="text" name="comment_{{ ev.eval_id }}_{{ it.item_id }}" placeholder="평가 내용" style="margin-top:6px"></div>{% endfor %}
+    <div class="field"><input type="text" name="overall_{{ ev.eval_id }}" placeholder="총평 (선택)"></div>
+  </div>{% endfor %}
+  <button type="submit">평가서 제출</button>
+</form>
+{% else %}<p class="flash info">이 링크의 평가는 이미 제출되었습니다. 감사합니다.</p>{% endif %}
+</div>
+{% endblock %}

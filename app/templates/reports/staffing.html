@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}시점별 투입 현황{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>시점별 투입 현황 <span class="muted small">— 대표 데모 시나리오 2 (성능 실험 대상 질의)</span></h1>
+<form method="get" class="inline"><div><label>기준 일자</label><input type="date" name="date" value="{{ d }}"></div><button type="submit">조회</button></form></div>
+<p class="muted">{{ d }} 기준 투입 {{ total }}건 · 프로젝트 {{ projects|length }}개</p>
+{% for pid, g in projects.items() %}
+<div class="card"><h3 style="margin-top:0"><a href="{{ url_for('projects.detail', project_id=pid) }}">{{ g.info.project_code }} {{ g.info.project_name }}</a> <span class="muted small">{{ g.info.client_name }} · {{ g.members|length }}명</span></h3>
+<table><thead><tr><th>직무</th><th>사번</th><th>이름</th><th>등급</th><th>투입 기간</th><th class="right">투입률</th></tr></thead><tbody>
+{% for m in g.members %}<tr><td>{{ m.role_name }}</td><td>{{ m.emp_no }}</td><td><a href="{{ url_for('employees.detail', emp_id=m.emp_id) }}">{{ m.emp_name }}</a></td><td>{{ m.skill_grade }}</td><td>{{ m.start_date }} ~ {{ m.end_date }}</td><td class="right">{{ m.participation_rate }}%</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="card muted">해당 일자에 투입된 인력이 없습니다.</div>{% endfor %}
+{% endblock %}

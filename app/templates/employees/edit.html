@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}내 정보 수정{% endblock %}
+{% block content %}
+<div class="card auth wide"><h1>내 정보 수정</h1>
+<form method="post"><div class="form-grid">
+  <div class="field"><label>사번</label><input type="text" value="{{ emp.emp_no }}" disabled></div>
+  <div class="field"><label>주민등록번호</label><input type="text" value="{{ emp.resident_reg_no }}" disabled></div>
+  <div class="field"><label>이름</label><input type="text" name="emp_name" value="{{ emp.emp_name }}" required></div>
+  <div class="field"><label>최종학력</label><select name="education_level">{% for e in educations %}<option {{ 'selected' if e==emp.education_level }}>{{ e }}</option>{% endfor %}</select></div>
+  <div class="field"><label>이메일</label><input type="email" name="email" value="{{ emp.email or '' }}"></div>
+  <div class="field"><label>연락처</label><input type="text" name="phone" value="{{ emp.phone or '' }}"></div>
+  {% if emp.emp_type=='DEV' %}
+  <div class="field"><label>기술등급 (경영진 심사로만 변경)</label><input type="text" value="{{ emp.skill_grade }}" disabled></div>
+  <div class="field"><label>개발 경력 기산일</label><input type="date" name="career_start_date" value="{{ emp.career_start_date }}" required></div>
+  {% else %}
+  <div class="field"><label>부서</label><select name="department">{% for k,v in departments.items() %}<option value="{{ k }}" {{ 'selected' if k==emp.department }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="field"><label>직책</label><input type="text" name="job_title" value="{{ emp.job_title or '' }}"></div>
+  {% endif %}
+  <div class="field"><label>새 비밀번호 (변경 시에만 입력)</label><input type="password" name="new_password" autocomplete="new-password"></div>
+</div>
+<button type="submit">저장</button> <a class="btn secondary" href="{{ url_for('employees.me') }}">취소</a></form></div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}인센티브 산정{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>인센티브 지급 기초자료 <span class="muted small">— 데모 시나리오 5</span></h1>
+<form method="get" class="inline"><select name="year" onchange="this.form.submit()">{% for y in years %}<option value="{{ y }}" {{ 'selected' if y==year }}>{{ y }}년 종료 프로젝트</option>{% endfor %}</select></form></div>
+<div class="card"><p class="muted small">개인별 연간 평균 종합점수 → 등급(S 150% / A 100% / B 50% / C 0%) × 기준액 100만원 × 참여 프로젝트 수 = 지급 권고액 (정책 파라미터는 조정 가능)</p>
+<table><thead><tr><th>#</th><th>사번</th><th>이름</th><th>등급</th><th class="right">프로젝트 수</th><th class="right">평균 종합점수</th><th class="center">S/A/B/C</th><th class="right">PM 추천</th><th>최종 등급</th><th class="right">지급 권고액</th></tr></thead><tbody>
+{% for r in rows %}<tr><td class="muted">{{ loop.index }}</td><td>{{ r.emp_no }}</td><td><a href="{{ url_for('employees.detail', emp_id=r.emp_id) }}">{{ r.emp_name }}</a></td><td>{{ r.skill_grade }}</td><td class="right">{{ r.project_cnt }}</td><td class="right"><strong>{{ r.avg_score }}</strong></td><td class="center small">{{ r.s_cnt }}/{{ r.a_cnt }}/{{ r.b_cnt }}/{{ r.c_cnt }}</td><td class="right">{{ r.pm_recommend_cnt }}</td><td><span class="badge {{ r.final_grade }}">{{ r.final_grade }}</span></td><td class="right">{{ r.recommended_bonus|won }}</td></tr>
+{% else %}<tr><td colspan="10" class="muted">해당 연도 평가 데이터가 없습니다.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,41 @@
+// SI-PMS ERD (dbdiagram.io 용) — Information Engineering 표기로 렌더링
+// 관계: `-` 1:1, `>` N:1 (참조측이 N)
+Project si_pms { database_type: 'MySQL' Note: 'SI 프로젝트 인력·평가 관리 시스템' }
+
+Table client { client_id int [pk, increment]  client_name varchar(100) [not null]  business_reg_no char(12) [not null, unique]  industry varchar(50)  address varchar(200)  phone varchar(20)  created_at datetime  Note: '발주처(고객사)' }
+Table client_contact { contact_id int [pk, increment]  client_id int [not null, ref: > client.client_id]  contact_name varchar(50) [not null]  position varchar(50)  email varchar(100)  phone varchar(20)  is_active tinyint [default: 1]  Note: '발주처 담당자(고객 평가자)' }
+
+Table employee { emp_id int [pk, increment]  emp_no char(7) [unique, note: 'E+YY+NNNN 자동채번']  emp_name varchar(50) [not null]  resident_reg_no char(14) [not null, unique]  education_level education_level [not null]  hire_date date [not null]  emp_type emp_type [not null, note: '서브타입 판별자']  email varchar(100)  phone varchar(20)  status emp_status [default: 'ACTIVE']  created_at datetime  updated_at datetime  Note: '직원(슈퍼타입)' }
+Table developer { emp_id int [pk, ref: - employee.emp_id]  skill_grade skill_grade [not null]  career_start_date date [not null]  grade_updated_at date  Note: '개발자(서브타입)' }
+Table staff { emp_id int [pk, ref: - employee.emp_id]  department department [not null]  job_title varchar(50)  Note: '지원직(서브타입)' }
+Table user_account { emp_id int [pk, ref: - employee.emp_id]  login_id varchar(30) [not null, unique]  password_hash varchar(255) [not null]  auth_role auth_role [default: 'EMPLOYEE']  is_active tinyint [default: 1]  last_login_at datetime  created_at datetime  Note: '로그인 계정' }
+
+Table skill { skill_id int [pk, increment]  skill_name varchar(50) [not null, unique]  category skill_category [not null] }
+Table employee_skill { emp_id int [ref: > developer.emp_id]  skill_id int [ref: > skill.skill_id]  proficiency tinyint [not null, note: '1~5']  years_used decimal(3,1) [default: 0]  last_used_date date  indexes { (emp_id, skill_id) [pk] }  Note: '개발자:기술 M:N 해소' }
+
+Table project { project_id int [pk, increment]  project_code varchar(12) [unique, note: 'P+YYYY-NNN 자동채번']  project_name varchar(100) [not null]  client_id int [not null, ref: > client.client_id]  start_date date [not null]  end_date date [not null]  status project_status [default: 'PLANNED']  contract_amount decimal(15,0)  description varchar(500)  created_at datetime  updated_at datetime }
+Table project_skill { project_id int [ref: > project.project_id]  skill_id int [ref: > skill.skill_id]  required_level tinyint [default: 3]  indexes { (project_id, skill_id) [pk] }  Note: '프로젝트:기술 M:N 해소' }
+Table job_role { role_id int [pk, increment]  role_code varchar(10) [not null, unique]  role_name varchar(30) [not null]  min_grade skill_grade [default: '초급']  sort_order tinyint [default: 0] }
+Table assignment { assignment_id int [pk, increment]  project_id int [not null, ref: > project.project_id]  emp_id int [not null, ref: > developer.emp_id]  role_id int [not null, ref: > job_role.role_id]  start_date date [not null]  end_date date [not null]  participation_rate tinyint [default: 100, note: '10~100']  note varchar(200)  created_at datetime  Note: '개발자:프로젝트 M:N 해소, 투입 이력' }
+
+Table evaluation { eval_id int [pk, increment]  project_id int [not null, ref: > project.project_id]  evaluatee_emp_id int [not null, ref: > developer.emp_id]  eval_type eval_type [not null, note: '서브타입 판별자']  status eval_status [default: 'SUBMITTED']  eval_date date  overall_comment varchar(500)  created_at datetime  Note: '프로젝트 평가(슈퍼타입)' }
+Table customer_eval { eval_id int [pk, ref: - evaluation.eval_id]  contact_id int [not null, ref: > client_contact.contact_id]  requested_by_emp_id int [not null, ref: > developer.emp_id]  requested_at datetime  access_token char(32) [not null, unique]  reported_at datetime  Note: '고객 평가(서브타입)' }
+Table pm_eval { eval_id int [pk, ref: - evaluation.eval_id]  evaluator_emp_id int [not null, ref: > developer.emp_id]  recommend_incentive tinyint [default: 0]  Note: 'PM 평가(서브타입)' }
+Table peer_eval { eval_id int [pk, ref: - evaluation.eval_id]  evaluator_emp_id int [not null, ref: > developer.emp_id]  is_anonymous tinyint [default: 1]  Note: '동료 평가(서브타입)' }
+Table eval_item { item_id int [pk, increment]  item_code varchar(20) [not null, unique]  item_name varchar(50) [not null]  description varchar(200)  weight decimal(3,2) [default: 1.00]  is_active tinyint [default: 1] }
+Table eval_detail { eval_id int [ref: > evaluation.eval_id]  item_id int [ref: > eval_item.item_id]  score tinyint [not null, note: '1~5']  comment varchar(500)  indexes { (eval_id, item_id) [pk] } }
+Table eval_type_weight { eval_type eval_type [pk]  weight decimal(3,2) [not null]  description varchar(100)  Note: '인센티브 가중치 정책' }
+
+Table grade_history { history_id int [pk, increment]  emp_id int [not null, ref: > developer.emp_id]  old_grade skill_grade  new_grade skill_grade [not null]  changed_at datetime  changed_by_emp_id int [ref: > employee.emp_id]  reason varchar(200) }
+Table seq_counter { seq_name varchar(20)  seq_year smallint  last_seq int [default: 0]  indexes { (seq_name, seq_year) [pk] }  Note: '자동 채번 카운터' }
+
+Enum education_level { 고졸 전문학사 학사 석사 박사 }
+Enum emp_type { DEV STAFF }
+Enum emp_status { ACTIVE LEAVE RESIGNED }
+Enum skill_grade { 초급 중급 고급 특급 }
+Enum department { MARKETING MANAGEMENT RND }
+Enum auth_role { EMPLOYEE EXECUTIVE }
+Enum skill_category { LANGUAGE FRAMEWORK DATABASE CLOUD OS TOOL METHOD }
+Enum project_status { PLANNED IN_PROGRESS COMPLETED CANCELLED }
+Enum eval_type { CUSTOMER PM PEER }
+Enum eval_status { REQUESTED SUBMITTED REPORTED }

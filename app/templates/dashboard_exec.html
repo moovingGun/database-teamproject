@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}경영진 대시보드{% endblock %}
+{% block content %}
+<h1>경영진 대시보드 <span class="muted small">기준일 {{ today }}</span></h1>
+<div class="grid kpi">
+  <div class="card"><div class="num">{{ kpi.inprog }}</div><div class="lbl">진행 중 프로젝트</div></div>
+  <div class="card"><div class="num">{{ kpi.planned }}</div><div class="lbl">착수 예정 프로젝트</div></div>
+  <div class="card"><div class="num">{{ kpi.assigned }}<span class="muted" style="font-size:14px"> / {{ kpi.devs }}</span></div><div class="lbl">현재 투입 개발자</div></div>
+  <div class="card"><div class="num">{{ kpi.available }}</div><div class="lbl">가용 개발자 (투입률 &lt; 100%)</div></div>
+  <div class="card"><div class="num">{{ kpi.cust_pending }}</div><div class="lbl">고객평가 미회신</div></div>
+</div>
+<h2>진행 중 프로젝트별 투입 현황 <span class="muted small">— 데모 시나리오 1</span></h2>
+<div class="card"><table>
+  <thead><tr><th>프로젝트번호</th><th>프로젝트명</th><th>발주처</th><th>기간</th><th>PM</th><th class="right">투입 인원</th><th class="right">FTE</th><th>투입 직원 (직무)</th></tr></thead>
+  <tbody>{% for s in staffing %}
+  <tr><td><a href="{{ url_for('projects.detail', project_id=s.project_id) }}">{{ s.project_code }}</a></td><td>{{ s.project_name }}</td><td>{{ s.client_name }}</td>
+      <td class="small">{{ s.start_date }} ~ {{ s.end_date }}</td><td>{{ s.pm_name or '-' }}</td><td class="right">{{ s.headcount }}</td><td class="right">{{ s.fte }}</td><td class="small">{{ s.members or '-' }}</td></tr>
+  {% endfor %}</tbody></table></div>
+<h2>현재 직무별 투입 인원</h2>
+<div class="card"><table style="max-width:420px"><tbody>{% for r in roles %}<tr><td>{{ r.role_name }}</td><td class="right">{{ r.cnt }}명</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

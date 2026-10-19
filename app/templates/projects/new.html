@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}프로젝트 등록{% endblock %}
+{% block content %}
+<div class="card auth wide"><h1>프로젝트 등록</h1><p class="muted small">프로젝트번호는 착수연도 기준으로 자동 채번됩니다 (P + 연도 + 일련번호).</p>
+<form method="post"><div class="form-grid">
+  <div class="field" style="grid-column:1/3"><label>프로젝트명</label><input type="text" name="project_name" value="{{ form.get('project_name','') }}" required></div>
+  <div class="field"><label>발주처</label><select name="client_id">{% for c in clients %}<option value="{{ c.client_id }}" {{ 'selected' if form.get('client_id')==c.client_id|string }}>{{ c.client_name }} ({{ c.industry }})</option>{% endfor %}</select></div>
+  <div class="field"><label>상태</label><select name="status"><option value="PLANNED">예정</option><option value="IN_PROGRESS" {{ 'selected' if form.get('status')=='IN_PROGRESS' }}>진행중</option></select></div>
+  <div class="field"><label>착수일자</label><input type="date" name="start_date" value="{{ form.get('start_date','') }}" required></div>
+  <div class="field"><label>종료(예정)일자</label><input type="date" name="end_date" value="{{ form.get('end_date','') }}" required></div>
+  <div class="field"><label>계약금액(원)</label><input type="number" name="contract_amount" value="{{ form.get('contract_amount','') }}" step="1000000"></div>
+  <div class="field" style="grid-column:1/3"><label>개요</label><textarea name="description">{{ form.get('description','') }}</textarea></div>
+  <div class="field" style="grid-column:1/3"><label>요구 기술 (복수 선택)</label><select name="skill_id" multiple size="8">{% for s in skills %}<option value="{{ s.skill_id }}">[{{ s.category }}] {{ s.skill_name }}</option>{% endfor %}</select></div>
+</div><button type="submit">등록</button> <a class="btn secondary" href="{{ url_for('projects.index') }}">취소</a></form></div>
+{% endblock %}

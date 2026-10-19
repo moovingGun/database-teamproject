@@ -1,0 +1,29 @@
+# SI-PMS 개발용 MySQL 8.0
+#   docker compose up -d      -> 최초 기동 시 db/init/*.sql 을 순서대로 자동 실행(스키마+로직+시드)
+#   docker compose down -v    -> 데이터까지 완전 초기화
+services:
+  db:
+    image: mysql:8.0
+    container_name: si_pms_db
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --log_bin_trust_function_creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: si_pms
+      MYSQL_USER: pms
+      MYSQL_PASSWORD: pms1234
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - si_pms_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot1234"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  si_pms_data:

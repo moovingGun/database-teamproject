@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% block title %}{{ p.project_name }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ p.project_code }} · {{ p.project_name }} <span class="badge {{ p.status }}">{{ status_ko[p.status] }}</span></h1>
+{% if is_executive %}<form method="post" action="{{ url_for('projects.change_status', project_id=p.project_id) }}" class="inline">
+  {% if p.status=='PLANNED' %}<button name="action" value="start" class="secondary">착수 처리</button>{% endif %}
+  {% if p.status=='IN_PROGRESS' %}<div><label>실제 종료일</label><input type="date" name="actual_end_date" value="{{ today.isoformat() }}"></div><button name="action" value="complete" onclick="return confirm('프로젝트를 종료 처리할까요? 열린 투입은 실제 종료일로 정리됩니다.')">종료 처리</button>{% endif %}
+  {% if p.status in ('PLANNED','IN_PROGRESS') %}<button name="action" value="cancel" class="danger" onclick="return confirm('취소 처리할까요?')">취소</button>{% endif %}
+</form>{% endif %}</div>
+<div class="card"><div class="form-grid">
+  <div><span class="muted">발주처</span> · {{ p.client_name }} <span class="muted small">({{ p.industry }})</span></div>
+  <div><span class="muted">기간</span> · {{ p.start_date }} ~ {{ p.end_date }}</div>
+  <div><span class="muted">계약금액</span> · {{ p.contract_amount|won }}</div>
+  <div><span class="muted">발주처 담당자</span> · {% for c in contacts %}{{ c.contact_name }} {{ c.position }}{{ ', ' if not loop.last }}{% else %}-{% endfor %}</div>
+  <div style="grid-column:1/3"><span class="muted">개요</span> · {{ p.description or '-' }}</div>
+  <div style="grid-column:1/3"><span class="muted">요구 기술</span> · {% for s in req_skills %}<span class="badge">{{ s.skill_name }} Lv{{ s.required_level }}</span> {% else %}-{% endfor %}</div>
+</div></div>
+
+<h2>투입 인력 ({{ assignments|length }}건)</h2>
+<div class="card"><table><thead><tr><th>직무</th><th>사번</th><th>이름</th><th>등급</th><th>투입 시작</th><th>투입 종료</th><th class="right">투입률</th><th>비고</th>{% if is_executive %}<th></th>{% endif %}</tr></thead><tbody>
+{% for a in assignments %}<tr {% if a.start_date <= today <= a.end_date %}style="background:#f0fdf4"{% endif %}>
+  <td><strong>{{ a.role_name }}</strong></td><td>{{ a.emp_no }}</td><td>{% if is_executive or a.emp_id==current_user.emp_id %}<a href="{{ url_for('employees.detail', emp_id=a.emp_id) }}">{{ a.emp_name }}</a>{% else %}{{ a.emp_name }}{% endif %}</td><td>{{ a.skill_grade }}</td>
+  <td>{{ a.start_date }}</td><td>{{ a.end_date }}</td><td class="right">{{ a.participation_rate }}%</td><td class="small muted">{{ a.note or '' }}</td>
+  {% if is_executive %}<td class="right">{% if p.status=='IN_PROGRESS' and a.end_date > today %}<form method="post" action="{{ url_for('projects.end_assignment', project_id=p.project_id, assignment_id=a.assignment_id) }}" class="inline"><input type="date" name="end_date" value="{{ today.isoformat() }}" style="width:150px"><button class="sm secondary">조기 철수</button></form>{% endif %}</td>{% endif %}
+</tr>{% else %}<tr><td colspan="9" class="muted">투입된 인력이 없습니다.</td></tr>{% endfor %}
+</tbody></table>
+{% if is_executive and p.status in ('PLANNED','IN_PROGRESS') %}
+<h3>투입 등록 <span class="muted small">(기간·투입률·PM 1명·최소 등급 규칙은 DB 트리거가 검증)</span></h3>
+<form method="post" action="{{ url_for('projects.add_assignment', project_id=p.project_id) }}" class="inline">
+  <div style="min-width:220px"><label>개발자</label><select name="emp_id">{% for d in developers %}<option value="{{ d.emp_id }}">{{ d.emp_name }} ({{ d.skill_grade }} · {{ d.emp_no }})</option>{% endfor %}</select></div>
+  <div><label>직무</label><select name="role_id">{% for r in roles %}<option value="{{ r.role_id }}">{{ r.role_name }} (≥{{ r.min_grade }})</option>{% endfor %}</select></div>
+  <div><label>투입 시작</label><input type="date" name="start_date" value="{{ p.start_date }}"></div>
+  <div><label>투입 종료</label><input type="date" name="end_date" value="{{ p.end_date }}"></div>
+  <div><label>투입률(%)</label><input type="number" name="participation_rate" value="100" min="10" max="100" step="10" style="width:90px"></div>
+  <div><label>비고</label><input type="text" name="note"></div>
+  <button type="submit">투입</button>
+</form>{% endif %}</div>
+
+{% if p.status=='COMPLETED' %}
+<h2>평가 진행 현황</h2>
+<div class="card">
+  <table style="max-width:520px"><thead><tr><th>유형</th><th>상태</th><th class="right">건수</th></tr></thead><tbody>
+  {% for e in eval_progress %}<tr><td>{{ {'CUSTOMER':'고객 평가','PM':'PM 평가','PEER':'동료 평가'}[e.eval_type] }}</td><td><span class="badge {{ e.status }}">{{ e.status }}</span></td><td class="right">{{ e.cnt }}</td></tr>{% else %}<tr><td colspan="3" class="muted">등록된 평가가 없습니다.</td></tr>{% endfor %}</tbody></table>
+  {% if customer_evals and (is_pm or is_executive) %}
+  <h3>고객 평가 의뢰 목록</h3><table><thead><tr><th>피평가자</th><th>평가자(발주처 담당자)</th><th>상태</th><th>제출일</th><th>보고일시</th><th>외부 링크</th></tr></thead><tbody>
+  {% for c in customer_evals %}<tr><td>{{ c.evaluatee_name }}</td><td>{{ c.contact_name }}</td><td><span class="badge {{ c.status }}">{{ c.status }}</span></td><td>{{ c.eval_date or '-' }}</td><td>{{ c.reported_at or '-' }}</td><td class="small">{% if c.status=='REQUESTED' %}<a href="{{ url_for('evaluations.customer_form', token=c.access_token) }}" target="_blank">평가 입력 화면 열기</a>{% else %}-{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}
+  {% if is_member %}<p style="margin-top:10px"><a class="btn" href="{{ url_for('evaluations.tasks') }}">내 평가 할 일 보기 →</a></p>{% endif %}
+</div>{% endif %}
+{% endblock %}

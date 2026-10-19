@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}프로젝트 목록{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>프로젝트</h1>
+<form method="get" class="inline"><select name="status" onchange="this.form.submit()"><option value="">전체 상태</option>{% for k,v in status_ko.items() %}<option value="{{ k }}" {{ 'selected' if status==k }}>{{ v }}</option>{% endfor %}</select>
+{% if is_executive %}<a class="btn" href="{{ url_for('projects.new') }}">+ 프로젝트 등록</a>{% endif %}</form></div>
+<div class="card"><table><thead><tr><th>프로젝트번호</th><th>프로젝트명</th><th>발주처</th><th>착수일</th><th>종료일</th><th>상태</th><th>PM</th><th class="right">현재 투입</th><th class="right">누적 투입</th></tr></thead><tbody>
+{% for p in rows %}<tr><td><a href="{{ url_for('projects.detail', project_id=p.project_id) }}">{{ p.project_code }}</a></td><td><a href="{{ url_for('projects.detail', project_id=p.project_id) }}">{{ p.project_name }}</a></td><td>{{ p.client_name }}</td><td>{{ p.start_date }}</td><td>{{ p.end_date }}</td><td><span class="badge {{ p.status }}">{{ status_ko[p.status] }}</span></td><td>{{ p.pm_name or '-' }}</td><td class="right">{{ p.current_headcount }}</td><td class="right">{{ p.total_headcount }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

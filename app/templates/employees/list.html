@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}직원 검색{% endblock %}
+{% block content %}
+<h1>직원 검색 <span class="muted small">경영진 전용 — 데모 시나리오 6 (기술·가용 인력 검색)</span></h1>
+<div class="card"><form method="get" class="inline">
+  <div><label>이름 / 사번</label><input type="text" name="q" value="{{ args.get('q','') }}"></div>
+  <div><label>구분</label><select name="emp_type"><option value="">전체</option><option value="DEV" {{ 'selected' if args.get('emp_type')=='DEV' }}>개발자</option><option value="STAFF" {{ 'selected' if args.get('emp_type')=='STAFF' }}>지원직</option></select></div>
+  <div><label>기술등급</label><select name="grade"><option value="">전체</option>{% for g in grades %}<option {{ 'selected' if args.get('grade')==g }}>{{ g }}</option>{% endfor %}</select></div>
+  <div style="min-width:200px"><label>보유 기술</label><select name="skill_id"><option value="">전체</option>{% for s in skills %}<option value="{{ s.skill_id }}" {{ 'selected' if args.get('skill_id')==s.skill_id|string }}>[{{ s.category }}] {{ s.skill_name }}</option>{% endfor %}</select></div>
+  <div><label>해당 일자에 가용(투입률&lt;100%)</label><input type="date" name="available_on" value="{{ args.get('available_on','') }}"></div>
+  <button type="submit">검색</button> <a class="btn secondary" href="{{ url_for('employees.search') }}">초기화</a>
+</form></div>
+<div class="card"><p class="muted small">{{ rows|length }}명</p><table>
+<thead><tr><th>사번</th><th>이름</th><th>구분</th><th>등급 / 부서</th><th>경력</th><th>최종학력</th><th>입사일</th><th>현재 투입 프로젝트</th><th class="right">현재 투입률</th></tr></thead><tbody>
+{% for e in rows %}<tr><td>{{ e.emp_no }}</td><td><a href="{{ url_for('employees.detail', emp_id=e.emp_id) }}">{{ e.emp_name }}</a></td><td>{{ '개발자' if e.emp_type=='DEV' else '지원직' }}</td>
+<td>{% if e.emp_type=='DEV' %}<strong>{{ e.skill_grade }}</strong>{% else %}{{ {'MARKETING':'마케팅','MANAGEMENT':'경영관리','RND':'연구개발'}[e.department] }} {{ e.job_title or '' }}{% endif %}</td>
+<td>{% if e.career_months is not none %}{{ e.career_months // 12 }}년 {{ e.career_months % 12 }}개월{% else %}-{% endif %}</td><td>{{ e.education_level }}</td><td>{{ e.hire_date }}</td>
+<td class="small">{{ e.current_projects or '-' }}</td><td class="right">{% if e.emp_type=='DEV' %}{{ e.current_rate }}%{% else %}-{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

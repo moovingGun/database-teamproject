@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}내 대시보드{% endblock %}
+{% block content %}
+<h1>{{ current_user.emp_name }} 님의 대시보드</h1>
+{% if todo %}<div class="flash warning">처리할 동료 평가가 <strong>{{ todo }}</strong>건 있습니다. <a href="{{ url_for('evaluations.tasks') }}">평가하러 가기 →</a></div>{% endif %}
+<h2>현재 투입 중인 프로젝트</h2>
+<div class="card">{% if current %}<table><thead><tr><th>프로젝트</th><th>발주처</th><th>직무</th><th>투입 기간</th><th class="right">투입률</th></tr></thead><tbody>
+{% for a in current %}<tr><td><a href="{{ url_for('projects.detail', project_id=a.project_id) }}">{{ a.project_code }} {{ a.project_name }}</a></td><td>{{ a.client_name }}</td><td>{{ a.role_name }}</td><td>{{ a.start_date }} ~ {{ a.end_date }}</td><td class="right">{{ a.participation_rate }}%</td></tr>{% endfor %}
+</tbody></table>{% else %}<p class="muted">현재 투입된 프로젝트가 없습니다.</p>{% endif %}</div>
+{% if upcoming %}<h2>투입 예정</h2><div class="card"><table><tbody>{% for a in upcoming %}<tr><td>{{ a.project_code }} {{ a.project_name }}</td><td>{{ a.role_name }}</td><td>{{ a.start_date }} ~ {{ a.end_date }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<h2>최근 받은 평가 종합</h2>
+<div class="card">{% if received %}<table><thead><tr><th>프로젝트</th><th class="right">고객</th><th class="right">PM</th><th class="right">동료</th><th class="right">종합</th><th>등급</th></tr></thead><tbody>
+{% for r in received %}<tr><td>{{ r.project_code }} {{ r.project_name }}</td><td class="right">{{ r.customer_score or '-' }}</td><td class="right">{{ r.pm_score or '-' }}</td><td class="right">{{ r.peer_score or '-' }}</td><td class="right"><strong>{{ r.weighted_score }}</strong></td><td><span class="badge {{ r.incentive_grade }}">{{ r.incentive_grade }}</span></td></tr>{% endfor %}
+</tbody></table>{% else %}<p class="muted">아직 평가 결과가 없습니다.</p>{% endif %}</div>
+{% endblock %}

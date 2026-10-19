@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% block title %}프로젝트 평가{% endblock %}
+{% block content %}
+<h1>프로젝트 평가</h1>
+<p class="muted small">종료된 프로젝트의 참여자는 동료 평가를, PM 은 추가로 PM 평가와 고객 평가 의뢰·보고를 수행합니다.</p>
+{% for p in projects %}
+<div class="card"><h2 style="margin-top:0"><a href="{{ url_for('projects.detail', project_id=p.project_id) }}">{{ p.project_code }} {{ p.project_name }}</a> <span class="muted small">종료 {{ p.end_date }}{% if p.is_pm %} · 내 역할: PM{% endif %}</span></h2>
+  <h3>동료 평가 대상</h3>
+  {% if p.peer_todo %}<ul class="clean">{% for m in p.peer_todo %}<li>{{ m.emp_name }} <span class="muted small">({{ m.roles }})</span> <a class="btn sm" href="{{ url_for('evaluations.new', project_id=p.project_id, eval_type='PEER', evaluatee_emp_id=m.emp_id) }}">동료 평가하기</a></li>{% endfor %}</ul>
+  {% else %}<p class="muted">모든 동료 평가를 완료했습니다.</p>{% endif %}
+  {% if p.is_pm %}
+  <h3>PM 평가 대상 (팀원)</h3>
+  {% if p.pm_todo %}<ul class="clean">{% for m in p.pm_todo %}<li>{{ m.emp_name }} <span class="muted small">({{ m.roles }})</span> <a class="btn sm" href="{{ url_for('evaluations.new', project_id=p.project_id, eval_type='PM', evaluatee_emp_id=m.emp_id) }}">PM 평가하기</a></li>{% endfor %}</ul>
+  {% else %}<p class="muted">모든 팀원의 PM 평가를 완료했습니다.</p>{% endif %}
+  <h3>고객 평가 (발주처 담당자 → 참여 직원)</h3>
+  {% if p.customer %}<p>{% for c in p.customer %}<span class="badge {{ c.status }}">{{ status_ko[c.status] }} {{ c.cnt }}건</span> {% if c.status=='REQUESTED' %}<a class="small" href="{{ url_for('evaluations.customer_form', token=c.token) }}" target="_blank">담당자용 입력 링크</a>{% endif %} {% endfor %}</p>
+    {% for c in p.customer if c.status=='SUBMITTED' %}<form method="post" action="{{ url_for('evaluations.report_customer', project_id=p.project_id) }}"><button type="submit">제출된 고객 평가 {{ c.cnt }}건 회사에 보고</button></form>{% endfor %}
+  {% else %}
+  <form method="post" action="{{ url_for('evaluations.request_customer', project_id=p.project_id) }}" class="inline">
+    <div style="min-width:240px"><label>발주처 담당자</label><select name="contact_id">{% for c in p.contacts %}<option value="{{ c.contact_id }}">{{ c.contact_name }} {{ c.position }} ({{ c.email }})</option>{% endfor %}</select></div>
+    <button type="submit">참여자 전원 고객 평가 의뢰</button></form>
+  {% endif %}
+  {% endif %}
+</div>
+{% else %}<div class="card"><p class="muted">참여한 종료 프로젝트가 없어 평가할 항목이 없습니다.</p></div>{% endfor %}
+<h2>내가 받은 평가 종합</h2>
+<div class="card">{% if received %}<table><thead><tr><th>프로젝트</th><th class="right">고객</th><th class="right">PM</th><th class="right">동료</th><th class="right">평가 수</th><th class="right">종합점수</th><th>등급</th></tr></thead><tbody>
+{% for r in received %}<tr><td>{{ r.project_code }} {{ r.project_name }}</td><td class="right">{{ r.customer_score or '-' }}</td><td class="right">{{ r.pm_score or '-' }}</td><td class="right">{{ r.peer_score or '-' }}</td><td class="right">{{ r.eval_count }}</td><td class="right"><strong>{{ r.weighted_score }}</strong></td><td><span class="badge {{ r.incentive_grade }}">{{ r.incentive_grade }}</span></td></tr>{% endfor %}
+</tbody></table><p class="muted small">동료 평가는 익명으로 집계되며 개별 평가자는 표시되지 않습니다.</p>{% else %}<p class="muted">아직 받은 평가가 없습니다.</p>{% endif %}</div>
+{% endblock %}

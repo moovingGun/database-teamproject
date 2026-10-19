@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}보유 기술 관리{% endblock %}
+{% block content %}
+<h1>보유 기술 (Skill Set) 관리</h1>
+<div class="card"><h3>기술 추가 / 수정</h3>
+<form method="post" class="inline">
+  <div style="min-width:220px"><label>기술</label><select name="skill_id">{% for s in skills %}<option value="{{ s.skill_id }}">[{{ s.category }}] {{ s.skill_name }}</option>{% endfor %}</select></div>
+  <div><label>숙련도 (1~5)</label><select name="proficiency">{% for i in range(1,6) %}<option value="{{ i }}" {{ 'selected' if i==3 }}>{{ i }}</option>{% endfor %}</select></div>
+  <div><label>사용 경력(년)</label><input type="number" name="years_used" step="0.5" min="0" max="40" value="1"></div>
+  <div><label>최근 사용일</label><input type="date" name="last_used_date" value="{{ today.isoformat() }}"></div>
+  <button type="submit">저장</button>
+</form></div>
+<div class="card"><table><thead><tr><th>분류</th><th>기술</th><th>숙련도</th><th class="right">사용 경력</th><th>최근 사용</th><th></th></tr></thead><tbody>
+{% for s in mine %}<tr><td class="muted">{{ s.category }}</td><td>{{ s.skill_name }}</td><td>{{ '★' * s.proficiency }}{{ '☆' * (5 - s.proficiency) }}</td><td class="right">{{ s.years_used }}년</td><td>{{ s.last_used_date or '-' }}</td>
+<td class="right"><form method="post" style="display:inline"><input type="hidden" name="action" value="delete"><input type="hidden" name="skill_id" value="{{ s.skill_id }}"><button class="sm danger" onclick="return confirm('삭제할까요?')">삭제</button></form></td></tr>
+{% else %}<tr><td colspan="6" class="muted">등록된 기술이 없습니다.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}
