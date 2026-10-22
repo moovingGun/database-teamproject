@@ -10,6 +10,10 @@ digraph "00_overview" {
     "skill" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#e8eefc" ALIGN="LEFT"><B>skill</B>  <FONT POINT-SIZE="10" COLOR="#555555">기술</FONT></TD></TR></TABLE>>];
     "employee_skill" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#e8eefc" ALIGN="LEFT"><B>employee_skill</B>  <FONT POINT-SIZE="10" COLOR="#555555">개발자 보유 기술</FONT></TD></TR></TABLE>>];
     "grade_history" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#e8eefc" ALIGN="LEFT"><B>grade_history</B>  <FONT POINT-SIZE="10" COLOR="#555555">기술등급 변경 이력</FONT></TD></TR></TABLE>>];
+    "cat_employee" [margin=0, width=0, height=0, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0" COLOR="#6b7280"><TR><TD PORT="in"><FONT POINT-SIZE="20">⊗</FONT></TD></TR><TR><TD BORDER="1" SIDES="B" WIDTH="26" HEIGHT="3" FIXEDSIZE="TRUE"></TD></TR><TR><TD BORDER="1" SIDES="B" WIDTH="26" HEIGHT="3" FIXEDSIZE="TRUE" PORT="out"></TD></TR></TABLE>>, xlabel=<<FONT POINT-SIZE="9" COLOR="#b45309">emp_type</FONT>>];
+    "employee" -> "cat_employee" [dir=none, headport="in:n", color="#6b7280", penwidth=1.1];
+    "cat_employee" -> "developer" [dir=none, tailport="out:s", color="#6b7280", penwidth=1.1];
+    "cat_employee" -> "staff" [dir=none, tailport="out:s", color="#6b7280", penwidth=1.1];
   }
   subgraph cluster_prj { label="발주처 · 프로젝트 · 투입"; style="rounded,filled"; fillcolor="#e7f6ec55"; color="#e7f6ec"; fontsize=14;
     "client" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#e7f6ec" ALIGN="LEFT"><B>client</B>  <FONT POINT-SIZE="10" COLOR="#555555">발주처(고객사)</FONT></TD></TR></TABLE>>];
@@ -27,6 +31,11 @@ digraph "00_overview" {
     "eval_item" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#fdf1e3" ALIGN="LEFT"><B>eval_item</B>  <FONT POINT-SIZE="10" COLOR="#555555">평가 항목</FONT></TD></TR></TABLE>>];
     "eval_detail" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#fdf1e3" ALIGN="LEFT"><B>eval_detail</B>  <FONT POINT-SIZE="10" COLOR="#555555">평가 상세</FONT></TD></TR></TABLE>>];
     "eval_type_weight" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#fdf1e3" ALIGN="LEFT"><B>eval_type_weight</B>  <FONT POINT-SIZE="10" COLOR="#555555">평가 유형별 가중치</FONT></TD></TR></TABLE>>];
+    "cat_evaluation" [margin=0, width=0, height=0, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0" COLOR="#6b7280"><TR><TD PORT="in"><FONT POINT-SIZE="20">⊗</FONT></TD></TR><TR><TD BORDER="1" SIDES="B" WIDTH="26" HEIGHT="3" FIXEDSIZE="TRUE"></TD></TR><TR><TD BORDER="1" SIDES="B" WIDTH="26" HEIGHT="3" FIXEDSIZE="TRUE" PORT="out"></TD></TR></TABLE>>, xlabel=<<FONT POINT-SIZE="9" COLOR="#b45309">eval_type</FONT>>];
+    "evaluation" -> "cat_evaluation" [dir=none, headport="in:n", color="#6b7280", penwidth=1.1];
+    "cat_evaluation" -> "customer_eval" [dir=none, tailport="out:s", color="#6b7280", penwidth=1.1];
+    "cat_evaluation" -> "pm_eval" [dir=none, tailport="out:s", color="#6b7280", penwidth=1.1];
+    "cat_evaluation" -> "peer_eval" [dir=none, tailport="out:s", color="#6b7280", penwidth=1.1];
   }
   subgraph cluster_chg { label="시나리오 A · 변경요청 승인"; style="rounded,filled"; fillcolor="#f3e8fd55"; color="#f3e8fd"; fontsize=14;
     "change_request" [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#8a94a6"><TR><TD BGCOLOR="#f3e8fd" ALIGN="LEFT"><B>change_request</B>  <FONT POINT-SIZE="10" COLOR="#555555">고객사 변경요청</FONT></TD></TR></TABLE>>];
@@ -54,9 +63,7 @@ digraph "00_overview" {
   "employee" -> "change_review" [dir=both, arrowtail=teeodot, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "client" -> "client_contact" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "client_contact" -> "customer_eval" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
-  "evaluation" -> "customer_eval" [dir=both, arrowtail=teetee, arrowhead=teeodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "developer" -> "customer_eval" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
-  "employee" -> "developer" [dir=both, arrowtail=teetee, arrowhead=teeodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "training_course" -> "development_plan" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "developer" -> "development_plan" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "staff" -> "development_plan" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
@@ -69,14 +76,11 @@ digraph "00_overview" {
   "project" -> "evaluation" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "employee" -> "grade_history" [dir=both, arrowtail=teeodot, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "developer" -> "grade_history" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
-  "evaluation" -> "peer_eval" [dir=both, arrowtail=teetee, arrowhead=teeodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "developer" -> "peer_eval" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
-  "evaluation" -> "pm_eval" [dir=both, arrowtail=teetee, arrowhead=teeodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "developer" -> "pm_eval" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "client" -> "project" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "project" -> "project_skill" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "skill" -> "project_skill" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
-  "employee" -> "staff" [dir=both, arrowtail=teetee, arrowhead=teeodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "skill" -> "training_course" [dir=both, arrowtail=teeodot, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "development_plan" -> "training_enrollment" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
   "training_session" -> "training_enrollment" [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280", penwidth=1.1, arrowsize=0.9];
@@ -90,10 +94,12 @@ digraph "00_overview" {
   "client_contact" -> "lg_a" [style=invis];
   subgraph cluster_legend { label="IE 표기"; fontsize=11; color="#d1d5db"; style=rounded;
     lg_a [shape=plaintext, label=""]; lg_b [shape=plaintext, label="1 : 0..N  (FK NOT NULL)"];
-    lg_c [shape=plaintext, label=""]; lg_d [shape=plaintext, label="1 : 0..1  (서브타입 · 1:1)"];
+    lg_c [shape=plaintext, label=""]; lg_d [shape=plaintext, label="1 : 0..1  (1:1)"];
     lg_e [shape=plaintext, label=""]; lg_f [shape=plaintext, label="0..1 : 0..N  (FK NULL 허용)"];
+    lg_g [shape=plaintext, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0" COLOR="#6b7280"><TR><TD PORT="in"><FONT POINT-SIZE="20">⊗</FONT></TD></TR><TR><TD BORDER="1" SIDES="B" WIDTH="26" HEIGHT="3" FIXEDSIZE="TRUE"></TD></TR><TR><TD BORDER="1" SIDES="B" WIDTH="26" HEIGHT="3" FIXEDSIZE="TRUE" PORT="out"></TD></TR></TABLE>>]; lg_h [shape=plaintext, label="서브타입: ⊗ 배타적 · 이중선 완전(전체) · 주황 글자 판별자"];
     lg_a -> lg_b [dir=both, arrowtail=teetee, arrowhead=crowodot, color="#6b7280"];
     lg_c -> lg_d [dir=both, arrowtail=teetee, arrowhead=teeodot, color="#6b7280"];
     lg_e -> lg_f [dir=both, arrowtail=teeodot, arrowhead=crowodot, color="#6b7280"];
+    lg_g -> lg_h [style=invis];
   }
 }
