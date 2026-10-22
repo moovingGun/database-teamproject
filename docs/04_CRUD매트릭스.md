@@ -41,3 +41,22 @@
 | 모든 엔티티에 R 이 존재하는가 | 예 |
 | D 가 없는 엔티티 | 이력·평가·투입 데이터는 업무상 삭제하지 않고 상태/종료일로 관리(감사 추적). EMPLOYEE 는 status=RESIGNED 로 논리 삭제 |
 | UI 없이 SQL 로만 관리되는 엔티티 | CLIENT, CLIENT_CONTACT, SKILL, JOB_ROLE, EVAL_ITEM, EVAL_TYPE_WEIGHT → 요구사항 2-4) 에 따라 `db/init/03_seed.sql` 로 적재하여 데모 |
+
+## 조별 특화 시나리오 기능 × 엔티티
+
+| 기능 \ 엔티티 | PROJECT | CLIENT_CONTACT | ASSIGNMENT | EMPLOYEE/DEVELOPER | STAFF | EVALUATION·EVAL_DETAIL | SKILL | CHANGE_REQUEST | CHANGE_REVIEW | CHANGE_HISTORY | TRAINING_COURSE | TRAINING_SESSION | DEVELOPMENT_PLAN | TRAINING_ENROLLMENT |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| A1 변경요청 접수 (PM) | R | R | R | R | | | | **C** | | | | | | |
+| A2 검토안 작성 (PM) | R | | R | R | | | | R U(트리거) | **C** | | | | | |
+| A3 내부 승인·반려 ★ | | | | R | | | | U(트리거) | **U** | | | | | |
+| A4 고객 동의 기록 (PM) | R | R | | | | | | U(트리거) | **U** | | | | | |
+| A5 계획 반영 (PM·경영진) | **U** | | R | R | | | | U(트리거) | R | **C** | | | | |
+| A6 변경요청 현황 ★ S7 | R | R | | R | | | | R | R | R | | | | |
+| B1 검토 대상 조회 (담당자) | R | | R | R | | R | R | | | | | | R | |
+| B2 역량개선계획 수립 (담당자) | R | | R | R | R | R | R | | | | R | | **C** | |
+| B3 교육 신청·취소 (직원) | | | | R | | | | | | | R | R | R | **C U** |
+| B4 수료·미수료 기록 (담당자) | | | | R | | | | | | | R | R | R | **U** |
+| B5 교육 이수 현황 ★ S8 | R | | | R | R | R | R | | | | R | R | R | R |
+| 기준 데이터 적재 (SQL) | | | | | U | | | | | | **C** | **C** | | |
+
+검증: 신규 엔티티 7개 모두 C·R 이 있고, 이력성 데이터(CHANGE_HISTORY, TRAINING_ENROLLMENT)는 삭제하지 않는다(취소·미수료도 상태로 보존).

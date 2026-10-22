@@ -22,6 +22,8 @@ GROUPS = [
     ("프로젝트 · 투입", ["project", "project_skill", "job_role", "assignment"]),
     ("프로젝트 평가 (슈퍼타입-서브타입)", ["evaluation", "customer_eval", "pm_eval", "peer_eval", "eval_item", "eval_detail", "eval_type_weight"]),
     ("이력 · 시스템", ["grade_history", "seq_counter"]),
+    ("조별 특화 시나리오 A: 고객사 변경요청 및 승인", ["change_request", "change_review", "change_history"]),
+    ("조별 특화 시나리오 B: 역량 개선 및 교육 이수", ["training_course", "training_session", "development_plan", "training_enrollment"]),
 ]
 
 cur.execute("SELECT table_name, table_comment FROM tables WHERE table_schema=%s AND table_type='BASE TABLE'", (DB,))
@@ -90,17 +92,26 @@ lines += ["## 뷰", "", "| 뷰 | 용도 |", "|---|---|",
           "| `v_employee` | 직원 슈퍼타입 + 개발자/지원직 서브타입 + 계정을 통합 조회, 주민번호 마스킹, 총 경력(개월)과 경력 기준 권고 등급 산출 |",
           "| `v_assignment_detail` | 투입 ⋈ 프로젝트 ⋈ 발주처 ⋈ 직원 ⋈ 직무 (경력 이력 / 투입 현황 공통 조회) |",
           "| `v_eval_score` | 평가별 항목 가중 평균 점수 (업무수행/커뮤니케이션 점수 포함) |",
-          "| `v_project_eval_summary` | 프로젝트·피평가자별 고객/PM/동료 평균 → 유형 가중치(eval_type_weight) 적용 종합점수 → 인센티브 등급(S/A/B/C) |", ""]
+          "| `v_project_eval_summary` | 프로젝트·피평가자별 고객/PM/동료 평균 → 유형 가중치(eval_type_weight) 적용 종합점수 → 인센티브 등급(S/A/B/C) |",
+          "| `v_change_request` | [시나리오 A] 변경요청 ⋈ 최신 검토안 ⋈ 결정자 ⋈ 동의 담당자 ⋈ 적용이력 (데모 S7) |",
+          "| `v_training_plan` | [시나리오 B] 역량개선계획 ⋈ 평가 종합 ⋈ 추천 과정 ⋈ 최근 신청, 이수 상태는 신청 이력에서 계산 (데모 S8) |", ""]
 lines += ["## 트리거 · 프로시저", "", "| 객체 | 유형 | 대상 | 역할 |", "|---|---|---|---|"]
 role = {"trg_employee_bi": "사번 자동 채번 (BR-02)", "trg_project_bi": "프로젝트번호 자동 채번 (BR-02)",
         "trg_assignment_bi": "투입 검증 (BR-01,03~07)", "trg_assignment_bu": "투입 수정 검증 (BR-01,03~07)",
         "trg_evaluation_bi": "평가 등록 검증 (BR-08,09)", "trg_customer_eval_bi": "고객 평가 검증 (BR-10,11,12)",
         "trg_pm_eval_bi": "PM 평가 검증 (BR-10,13)", "trg_peer_eval_bi": "동료 평가 검증 (BR-10,14)",
-        "trg_developer_bu": "등급 변경일 갱신 (BR-15)", "trg_developer_au": "등급 변경 이력 기록 (BR-15)"}
+        "trg_developer_bu": "등급 변경일 갱신 (BR-15)", "trg_developer_au": "등급 변경 이력 기록 (BR-15)",
+        "trg_change_request_bi": "변경요청 검증·요청번호 채번 (BR-16,17,18)", "trg_change_review_bi": "검토안 등록 검증 (BR-18,19,21,22)",
+        "trg_change_review_bu": "검토안 결정·동의 검증, 결정 후 수정 금지 (BR-19~22)", "trg_change_review_ai": "요청 상태 갱신",
+        "trg_change_review_au": "요청 상태 갱신", "trg_change_history_bi": "반영 가능 여부 검증 (BR-19,23)",
+        "trg_change_history_ai": "요청 상태 APPLIED", "trg_development_plan_bi": "계획 대상·담당자 검증 (BR-24,25)",
+        "trg_enrollment_bi": "신청 검증: 추천 과정·시작 전·중복·정원 (BR-26~29)", "trg_enrollment_bu": "취소·수료 시점 검증 (BR-29)"}
 for t in triggers:
     lines.append(f"| `{t['TRIGGER_NAME']}` | {t['ACTION_TIMING']} {t['EVENT_MANIPULATION']} 트리거 | `{t['EVENT_OBJECT_TABLE']}` | {role.get(t['TRIGGER_NAME'], '')} |")
 for r in routines:
-    desc = {"sp_next_seq": "연도별 일련번호 채번 (행 잠금)", "sp_validate_assignment": "투입 규칙 검증 공통 로직"}.get(r["ROUTINE_NAME"], "")
+    desc = {"sp_next_seq": "연도별 일련번호 채번 (행 잠금)", "sp_validate_assignment": "투입 규칙 검증 공통 로직",
+            "sp_validate_change_review": "검토안 등록·결정·동의 공통 검증", "sp_sync_change_status": "최신 검토안 기준 요청 상태 계산",
+            "sp_apply_change": "변경 반영: 검증 → 이력 기록 → 종료예정일·계약금액 변경"}.get(r["ROUTINE_NAME"], "")
     lines.append(f"| `{r['ROUTINE_NAME']}` | {r['ROUTINE_TYPE']} | - | {desc} |")
 OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 print(f"wrote {OUT} ({len(tcomment)} tables)")

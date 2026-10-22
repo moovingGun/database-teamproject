@@ -1,5 +1,5 @@
 -- =====================================================================
---  데모 시나리오 질의 (모두 2개 이상 테이블 조인)  -  docs/05_데모시나리오.md 와 동일
+--  데모 시나리오 질의 S1~S8 (모두 2개 이상 테이블 조인)  -  docs/05_데모시나리오.md 와 동일
 --  실행: docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 si_pms < db/demo/demo_scenarios.sql
 --  * 시나리오 2 가 대표 시나리오이며 성능 향상 기법(인덱스) 실험 대상 (scripts/perf_benchmark.py)
 -- =====================================================================
@@ -148,3 +148,64 @@ SELECT e.emp_no, e.emp_name, d.skill_grade, es.proficiency, es.years_used,
                     WHERE x.emp_id = e.emp_id AND x.participation_rate = 100
                       AND x.start_date <= '2027-06-30' AND x.end_date >= '2027-01-15')
  ORDER BY d.skill_grade DESC, es.proficiency DESC;
+
+-- =====================================================================
+--  조별 특화 시나리오 데모
+-- =====================================================================
+-- ---------------------------------------------------------------------
+-- [S7] 시나리오 A: 프로젝트별 변경요청 처리 현황 — 최신 검토안, 내부 승인, 고객 동의, 반영 전후 값
+--      change_request ⋈ project ⋈ client ⋈ client_contact ⋈ employee(PM) ⋈ change_review(최신 차수)
+--      ⟕ employee(결정자) ⟕ client_contact(동의자) ⟕ change_history ⟕ employee(반영자)   (10개 테이블)
+--      아직 검토·동의·반영되지 않은 요청도 LEFT JOIN 으로 함께 출력
+-- ---------------------------------------------------------------------
+SELECT '[S7] 변경요청 처리 현황 (최신 검토안 기준)' AS scenario;
+SELECT cr.cr_no, p.project_code, c.client_name, cc.contact_name AS requested_by, cr.title, cr.status,
+       rv.version_no, rv.proposed_end_date, rv.additional_amount,
+       rv.decision, ex.emp_name AS decided_by, rv.consent, ccs.contact_name AS consent_by,
+       h.before_end_date, h.after_end_date, h.before_amount, h.after_amount, ap.emp_name AS applied_by
+  FROM change_request cr
+  JOIN project  p  ON p.project_id = cr.project_id
+  JOIN client   c  ON c.client_id  = p.client_id
+  JOIN client_contact cc ON cc.contact_id = cr.contact_id
+  JOIN employee pm ON pm.emp_id = cr.received_by_emp_id
+  LEFT JOIN change_review rv ON rv.cr_id = cr.cr_id
+        AND rv.version_no = (SELECT MAX(x.version_no) FROM change_review x WHERE x.cr_id = cr.cr_id)
+  LEFT JOIN employee ex ON ex.emp_id = rv.decided_by_emp_id
+  LEFT JOIN client_contact ccs ON ccs.contact_id = rv.consent_contact_id
+  LEFT JOIN change_history h ON h.review_id = rv.review_id
+  LEFT JOIN employee ap ON ap.emp_id = h.applied_by_emp_id
+ ORDER BY p.project_code, cr.cr_no;
+
+-- ---------------------------------------------------------------------
+-- [S8] 시나리오 B: 직원별 프로젝트 평가 결과 + 역량개선계획 + 교육 신청·수료 현황
+--      development_plan ⋈ employee ⋈ developer ⋈ project ⋈ training_course ⋈ employee(담당자)
+--      ⟕ v_project_eval_summary ⟕ training_enrollment(최근) ⟕ training_session      (9개 테이블 + 뷰)
+--      수강 신청을 하지 않은 계획도 추천 교육과정·이수 목표일과 함께 출력
+-- ---------------------------------------------------------------------
+SELECT '[S8] 직원별 평가 결과와 교육 이수 현황' AS scenario;
+SELECT e.emp_no, e.emp_name, p.project_code, es.weighted_score,
+       tc.course_name, m.emp_name AS manager, dp.created_date, dp.due_date,
+       CASE WHEN EXISTS (SELECT 1 FROM training_enrollment x WHERE x.plan_id = dp.plan_id AND x.status = 'COMPLETED') THEN '수료'
+            WHEN EXISTS (SELECT 1 FROM training_enrollment x WHERE x.plan_id = dp.plan_id AND x.status = 'APPLIED') THEN '신청'
+            WHEN EXISTS (SELECT 1 FROM training_enrollment x WHERE x.plan_id = dp.plan_id AND x.status = 'NOT_COMPLETED') THEN '미수료'
+            ELSE '미신청' END AS plan_status,
+       le.status AS last_enroll_status, ts.start_at AS last_session
+  FROM development_plan dp
+  JOIN employee  e  ON e.emp_id = dp.emp_id
+  JOIN developer d  ON d.emp_id = dp.emp_id
+  JOIN project   p  ON p.project_id = dp.project_id
+  JOIN training_course tc ON tc.course_id = dp.course_id
+  JOIN employee  m  ON m.emp_id = dp.manager_emp_id
+  LEFT JOIN v_project_eval_summary es ON es.project_id = dp.project_id AND es.evaluatee_emp_id = dp.emp_id
+  LEFT JOIN training_enrollment le ON le.enroll_id = (SELECT MAX(y.enroll_id) FROM training_enrollment y WHERE y.plan_id = dp.plan_id)
+  LEFT JOIN training_session ts ON ts.session_id = le.session_id
+ ORDER BY plan_status, e.emp_name;
+
+SELECT '[S8-b] 교육과정별 수요 (계획 수 · 미신청 · 신청 · 수료)' AS scenario;
+SELECT tc.course_name, COUNT(dp.plan_id) AS plans,
+       SUM(v.plan_status = 'NOT_APPLIED') AS not_applied, SUM(v.plan_status = 'APPLIED') AS applied,
+       SUM(v.plan_status = 'COMPLETED') AS completed
+  FROM training_course tc
+  LEFT JOIN development_plan dp ON dp.course_id = tc.course_id
+  LEFT JOIN v_training_plan v ON v.plan_id = dp.plan_id
+ GROUP BY tc.course_id, tc.course_name ORDER BY plans DESC;

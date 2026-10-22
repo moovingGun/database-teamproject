@@ -7,13 +7,13 @@ Table client_contact { contact_id int [pk, increment]  client_id int [not null, 
 
 Table employee { emp_id int [pk, increment]  emp_no char(7) [unique, note: 'E+YY+NNNN 자동채번']  emp_name varchar(50) [not null]  resident_reg_no char(14) [not null, unique]  education_level education_level [not null]  hire_date date [not null]  emp_type emp_type [not null, note: '서브타입 판별자']  email varchar(100)  phone varchar(20)  status emp_status [default: 'ACTIVE']  created_at datetime  updated_at datetime  Note: '직원(슈퍼타입)' }
 Table developer { emp_id int [pk, ref: - employee.emp_id]  skill_grade skill_grade [not null]  career_start_date date [not null]  grade_updated_at date  Note: '개발자(서브타입)' }
-Table staff { emp_id int [pk, ref: - employee.emp_id]  department department [not null]  job_title varchar(50)  Note: '지원직(서브타입)' }
+Table staff { emp_id int [pk, ref: - employee.emp_id]  department department [not null]  job_title varchar(50)  is_training_manager tinyint [default: 0, note: '교육 담당자']  Note: '지원직(서브타입)' }
 Table user_account { emp_id int [pk, ref: - employee.emp_id]  login_id varchar(30) [not null, unique]  password_hash varchar(255) [not null]  auth_role auth_role [default: 'EMPLOYEE']  is_active tinyint [default: 1]  last_login_at datetime  created_at datetime  Note: '로그인 계정' }
 
 Table skill { skill_id int [pk, increment]  skill_name varchar(50) [not null, unique]  category skill_category [not null] }
 Table employee_skill { emp_id int [ref: > developer.emp_id]  skill_id int [ref: > skill.skill_id]  proficiency tinyint [not null, note: '1~5']  years_used decimal(3,1) [default: 0]  last_used_date date  indexes { (emp_id, skill_id) [pk] }  Note: '개발자:기술 M:N 해소' }
 
-Table project { project_id int [pk, increment]  project_code varchar(12) [unique, note: 'P+YYYY-NNN 자동채번']  project_name varchar(100) [not null]  client_id int [not null, ref: > client.client_id]  start_date date [not null]  end_date date [not null]  status project_status [default: 'PLANNED']  contract_amount decimal(15,0)  description varchar(500)  created_at datetime  updated_at datetime }
+Table project { project_id int [pk, increment]  project_code varchar(12) [unique, note: 'P+YYYY-NNN 자동채번']  project_name varchar(100) [not null]  client_id int [not null, ref: > client.client_id]  start_date date [not null]  end_date date [not null, note: '종료예정일']  actual_end_date date [note: '실제 종료일']  status project_status [default: 'PLANNED']  contract_amount decimal(15,0)  description varchar(500)  created_at datetime  updated_at datetime }
 Table project_skill { project_id int [ref: > project.project_id]  skill_id int [ref: > skill.skill_id]  required_level tinyint [default: 3]  indexes { (project_id, skill_id) [pk] }  Note: '프로젝트:기술 M:N 해소' }
 Table job_role { role_id int [pk, increment]  role_code varchar(10) [not null, unique]  role_name varchar(30) [not null]  min_grade skill_grade [default: '초급']  sort_order tinyint [default: 0] }
 Table assignment { assignment_id int [pk, increment]  project_id int [not null, ref: > project.project_id]  emp_id int [not null, ref: > developer.emp_id]  role_id int [not null, ref: > job_role.role_id]  start_date date [not null]  end_date date [not null]  participation_rate tinyint [default: 100, note: '10~100']  note varchar(200)  created_at datetime  Note: '개발자:프로젝트 M:N 해소, 투입 이력' }
@@ -27,6 +27,21 @@ Table eval_detail { eval_id int [ref: > evaluation.eval_id]  item_id int [ref: >
 Table eval_type_weight { eval_type eval_type [pk]  weight decimal(3,2) [not null]  description varchar(100)  Note: '인센티브 가중치 정책' }
 
 Table grade_history { history_id int [pk, increment]  emp_id int [not null, ref: > developer.emp_id]  old_grade skill_grade  new_grade skill_grade [not null]  changed_at datetime  changed_by_emp_id int [ref: > employee.emp_id]  reason varchar(200) }
+// ---- 조별 특화 시나리오 A: 고객사 변경요청 및 승인 ----
+Table change_request { cr_id int [pk, increment]  cr_no varchar(12) [unique, note: 'CR+YYYY-NNN 자동채번']  project_id int [not null, ref: > project.project_id]  contact_id int [not null, ref: > client_contact.contact_id]  received_by_emp_id int [not null, ref: > developer.emp_id]  request_date date [not null]  title varchar(100) [not null]  content varchar(1000) [not null]  reason varchar(500)  status cr_status [default: 'RECEIVED']  created_at datetime  Note: '고객사 변경요청' }
+Table change_review { review_id int [pk, increment]  cr_id int [not null, ref: > change_request.cr_id]  version_no tinyint [not null]  reviewer_emp_id int [not null, ref: > developer.emp_id]  proposed_end_date date [not null]  additional_amount decimal(15,0) [default: 0]  review_comment varchar(1000)  reviewed_at datetime  decision decision [default: 'PENDING']  decided_by_emp_id int [ref: > employee.emp_id]  decided_at date  decision_reason varchar(500)  consent consent [default: 'PENDING']  consent_contact_id int [ref: > client_contact.contact_id]  consent_date date  consent_evidence varchar(300)  consent_recorded_by int [ref: > employee.emp_id]  indexes { (cr_id, version_no) [unique] }  Note: '검토안: 영향분석 + 내부 승인 + 고객 동의' }
+Table change_history { history_id int [pk, increment]  review_id int [not null, unique, ref: - change_review.review_id]  before_end_date date [not null]  after_end_date date [not null]  before_amount decimal(15,0)  after_amount decimal(15,0)  applied_by_emp_id int [not null, ref: > employee.emp_id]  applied_at datetime  Note: '변경 적용 이력' }
+// ---- 조별 특화 시나리오 B: 역량 개선 및 교육 이수 ----
+Table training_course { course_id int [pk, increment]  course_name varchar(100) [not null, unique]  field course_field [not null]  skill_id int [ref: > skill.skill_id, note: 'NULL 허용']  description varchar(500) }
+Table training_session { session_id int [pk, increment]  course_id int [not null, ref: > training_course.course_id]  start_at datetime [not null]  end_at datetime [not null]  place varchar(100) [not null]  capacity smallint [not null] }
+Table development_plan { plan_id int [pk, increment]  emp_id int [not null, ref: > developer.emp_id]  project_id int [not null, ref: > project.project_id]  course_id int [not null, ref: > training_course.course_id]  manager_emp_id int [not null, ref: > staff.emp_id]  improvement_goal varchar(200) [not null]  reason varchar(500) [not null]  created_date date [not null]  due_date date [not null]  Note: '역량개선계획' }
+Table training_enrollment { enroll_id int [pk, increment]  plan_id int [not null, ref: > development_plan.plan_id]  session_id int [not null, ref: > training_session.session_id]  applied_at datetime  status enroll_status [default: 'APPLIED']  attended tinyint  processed_at datetime  Note: '교육 신청 및 이수' }
+Enum cr_status { RECEIVED REVIEWING APPROVED AGREED APPLIED REJECTED DECLINED }
+Enum decision { PENDING APPROVED REJECTED }
+Enum consent { PENDING AGREED DECLINED }
+Enum course_field { TECH COMM MGMT QUALITY }
+Enum enroll_status { APPLIED CANCELLED COMPLETED NOT_COMPLETED }
+
 Table seq_counter { seq_name varchar(20)  seq_year smallint  last_seq int [default: 0]  indexes { (seq_name, seq_year) [pk] }  Note: '자동 채번 카운터' }
 
 Enum education_level { 고졸 전문학사 학사 석사 박사 }

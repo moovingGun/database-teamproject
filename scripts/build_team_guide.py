@@ -1,0 +1,355 @@
+"""
+팀 공유 페이지 생성:  .venv/bin/python scripts/build_team_guide.py  →  docs/팀가이드.html
+이미지는 상대 경로(screenshots/, erd/)로 참조하므로 docs/ 폴더째 열면 그대로 보인다.
+아티팩트로 올릴 때는 같은 경로로 이미지 파일을 함께 올린다.
+"""
+import html
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "docs" / "팀가이드.html"
+REPO = "https://github.com/moovingGun/database-teamproject"
+
+SHOTS = [  # (그룹, 파일, 제목, 설명)
+    ("common", "01_login", "로그인", "데모 계정 안내가 있는 로그인 화면"),
+    ("common", "02_signup_dup", "회원가입 · ID 중복 확인", "이미 등록된 ID(dev01)를 입력하고 [중복확인]을 누르면 바로 거부 메시지. 가입하면 사번 자동 부여 (URQ001·002)"),
+    ("exec", "10_exec_dashboard", "경영진 대시보드 · S1", "진행 중 프로젝트 수, 프로젝트별 투입 인원·FTE·PM·직무 구성, 결정 대기 변경요청 수"),
+    ("exec", "14_staffing_at_date", "시점별 투입 현황 · S2 대표 시나리오", "2025-06-01 기준 누가 어느 프로젝트에 어떤 직무로 있었는지. 성능 실험 대상 질의"),
+    ("exec", "11_projects", "프로젝트 목록", "상태별 필터, PM, 현재·누적 투입 인원"),
+    ("exec", "12_project_detail", "프로젝트 상세 · 투입 인력", "종료예정일과 실제 종료일 구분, 투입 인력과 조기 철수, 투입 등록"),
+    ("exec", "13_assignment_rejected", "투입 규칙 거부 · BR-05", "이미 100% 투입된 개발자를 다른 프로젝트에 50% 넣으려 하면 DB 트리거가 거부하고 이유를 그대로 표시"),
+    ("exec", "15_employee_search", "직원 검색 · S6", "보유 기술·등급·특정 일자 가용 여부로 투입 후보 검색 (경영진만)"),
+    ("exec", "16_employee_detail", "직원 상세 · S3 경력관리", "보유 기술, 프로젝트 참여 이력, 평가 종합, 기술등급 변경과 이력"),
+    ("exec", "17_eval_report", "평가 결과 · S4", "고객·PM·동료 평균과 가중 종합점수, 인센티브 등급, 평가 상세"),
+    ("exec", "18_incentive", "인센티브 기초자료 · S5", "연도별 개인 평균 종합점수, 등급, PM 추천 수, 지급 권고액"),
+    ("eval", "20_eval_tasks", "평가 할 일 (PM)", "동료 평가 대상, PM 평가 대상, 고객 평가 의뢰·보고"),
+    ("eval", "21_pm_eval_form", "PM 평가 입력", "업무수행·커뮤니케이션 항목별 1~5점과 평가 내용, 인센티브 추천"),
+    ("eval", "22_customer_eval_form", "고객 평가서 (발주처 담당자)", "로그인 없이 PM 이 보낸 링크로 참여 직원 전원을 한 화면에서 평가"),
+    ("chg", "33_project_changes", "변경요청 접수 (PM)", "프로젝트 상세의 변경요청 목록과 접수 폼. 고객 전용 화면 없이 PM 이 등록"),
+    ("chg", "31_change_decision", "검토안 승인 대기 (경영진)", "PM 의 영향 분석(제안 종료예정일·추가금액)을 보고 승인 또는 반려"),
+    ("chg", "32_change_applied", "반영 완료 · 변경 전후 값", "승인과 고객 동의를 모두 받은 뒤 계획에 반영. 종료예정일·계약금액 전후 이력"),
+    ("chg", "30_change_report", "변경요청 처리 현황 · S7", "프로젝트별 요청, 최신 검토안, 결정, 고객 동의, 반영 여부 (미처리 포함)"),
+    ("edu", "41_training_manage", "교육 관리 (교육 담당자)", "수료 기록 대기, 평가 점수가 낮은 검토 대상, 역량개선계획, 예정 교육일정"),
+    ("edu", "42_training_plan_new", "역량개선계획 수립", "평가 항목별 의견과 보유 기술을 보고 추천 과정·개선 목표·이수 목표일 등록"),
+    ("edu", "43_my_training", "내 교육 (직원)", "추천받은 과정의 개설 일정에 신청·취소. 정원과 신청 인원 표시"),
+    ("edu", "40_training_report", "교육 이수 현황 · S8", "직원별 평가 결과와 계획·신청·수료 상태, 교육과정별 수요"),
+    ("dev", "50_dev_dashboard", "개발자 대시보드", "현재 투입 프로젝트, 미신청 교육·미처리 동료 평가 알림, 받은 평가"),
+    ("dev", "51_my_skills", "보유 기술 관리", "기술별 숙련도·사용 경력·최근 사용일 등록"),
+]
+GROUPS = [("all", "전체"), ("common", "공통"), ("exec", "경영진"), ("eval", "평가"), ("chg", "시나리오 A 변경요청"),
+          ("edu", "시나리오 B 교육"), ("dev", "개발자")]
+ERDS = [("00_overview", "전체 개요"), ("01_hr", "직원·계정·기술"), ("02_prj", "발주처·프로젝트·투입"), ("03_eval", "프로젝트 평가"),
+        ("04_chg", "시나리오 A 변경요청"), ("05_edu", "시나리오 B 교육")]
+for _, f, *_ in SHOTS:
+    assert (ROOT / "docs" / "screenshots" / f"{f}.jpg").exists(), f
+for f, _ in ERDS:
+    assert (ROOT / "docs" / "erd" / f"{f}.png").exists(), f
+
+e = html.escape
+group_name = dict(GROUPS)
+gallery = "\n".join(
+    f'<figure class="shot" data-g="{g}"><button type="button" class="thumb" data-src="screenshots/{f}.jpg" data-cap="{e(t)} — {e(d)}" '
+    f'aria-label="{e(t)} 크게 보기"><img src="screenshots/{f}.jpg" alt="{e(t)}" loading="lazy"></button>'
+    f'<figcaption><span class="tag">{e(group_name[g])}</span><b>{e(t)}</b><span>{e(d)}</span></figcaption></figure>'
+    for g, f, t, d in SHOTS)
+group_tabs = "".join(f'<button type="button" class="chipbtn{" on" if k == "all" else ""}" data-g="{k}">{e(v)}</button>' for k, v in GROUPS)
+erd_tabs = "".join(f'<button type="button" class="chipbtn{" on" if i == 0 else ""}" data-erd="erd/{f}.png" data-cap="{e(v)}">{e(v)}</button>'
+                   for i, (f, v) in enumerate(ERDS))
+
+PAGE = r'''<title>SI-PMS 팀 가이드</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 핸드북 — 데스크톱은 왼쪽 고정 목차 + 본문, 휴대폰은 한 줄. 앱 상단바와 같은 남색 계열 */
+:root{
+  --bg:#f6f7fb; --surface:#ffffff; --surface-2:#eef1f8; --line:#d9deea;
+  --fg:#17203a; --muted:#5b6785; --accent:#1e40af; --accent-soft:#dbe4ff; --ink:#111827; --ink-fg:#e5e9f5;
+  --ok:#157347; --ok-soft:#d8f0e2; --warn:#9a5b00; --warn-soft:#fdebc8; --a:#7c3aed; --a-soft:#ede4fe; --b:#be185d; --b-soft:#fce4ef;
+  --font:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1422; --surface:#161c2e; --surface-2:#1d2538; --line:#2b3550;
+  --fg:#e6eaf5; --muted:#9aa6c4; --accent:#8fa8ff; --accent-soft:#25306a; --ink:#0a0e1a; --ink-fg:#e6eaf5;
+  --ok:#5ad08a; --ok-soft:#153626; --warn:#f0b64a; --warn-soft:#3b2a0c; --a:#c4a5ff; --a-soft:#2e2150; --b:#ff8fbf; --b-soft:#45182c; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f1422; --surface:#161c2e; --surface-2:#1d2538; --line:#2b3550;
+  --fg:#e6eaf5; --muted:#9aa6c4; --accent:#8fa8ff; --accent-soft:#25306a; --ink:#0a0e1a; --ink-fg:#e6eaf5;
+  --ok:#5ad08a; --ok-soft:#153626; --warn:#f0b64a; --warn-soft:#3b2a0c; --a:#c4a5ff; --a-soft:#2e2150; --b:#ff8fbf; --b-soft:#45182c; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.65;margin:0}
+a{color:var(--accent)}
+.band{background:var(--ink);color:var(--ink-fg)}
+.band .in{max-width:1220px;margin:0 auto;padding-block:34px 26px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9fb0e6;margin:0 0 8px}
+h1{font-size:clamp(26px,4vw,38px);margin:0 0 8px;line-height:1.2;text-wrap:balance;font-weight:700}
+.lead{max-width:64ch;margin:0;color:#c8d0e6;font-size:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:20px}
+.stat{background:#1b2440;border:1px solid #2f3b66;border-radius:10px;padding:10px 14px}
+.stat b{display:block;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;color:#b9c8ff;line-height:1.2}
+.stat span{font-size:13px;color:#aeb8d6}
+.wrap{max-width:1220px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:200px minmax(0,1fr);gap:36px}
+nav.rail{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;padding-top:6px}
+nav.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav.rail a{display:block;padding:6px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:14px}
+nav.rail a:hover,nav.rail a:focus-visible{background:var(--surface-2);color:var(--fg);outline:none}
+nav.rail .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 10px;margin-bottom:8px}
+main{min-width:0;display:flex;flex-direction:column;gap:48px}
+section{min-width:0;scroll-margin-top:16px}
+h2{font-size:22px;margin:0 0 6px;line-height:1.25;text-wrap:balance}
+h3{font-size:16px;margin:22px 0 8px}
+.sub{color:var(--muted);margin:0 0 16px;max-width:72ch}
+p{max-width:72ch}
+code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+pre.cmd{position:relative;background:var(--ink);color:var(--ink-fg);font-family:var(--mono);font-size:13px;padding:10px 84px 10px 14px;border-radius:8px;overflow-x:auto;margin:6px 0 0;white-space:pre}
+pre.cmd code{background:none;padding:0;font-size:inherit}
+pre.cmd button{position:absolute;top:7px;right:8px;font:inherit;font-size:12px;background:#2a3558;color:#dfe6ff;border:1px solid #3d4a7a;border-radius:6px;padding:3px 9px;cursor:pointer}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:12px;margin:0;padding:0;list-style:none}
+.steps>li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.steps>li::before{counter-increment:s;content:counter(s);width:30px;height:30px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:600;display:flex;align-items:center;justify-content:center;font-size:14px}
+.steps h4{margin:3px 0 6px;font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.04em;color:var(--muted);font-weight:600;background:var(--surface-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.card h4{margin:0 0 6px;font-size:15px}
+.card p{margin:0;font-size:14px;color:var(--muted)}
+.card.a{border-top:3px solid var(--a)}.card.b{border-top:3px solid var(--b)}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--surface-2);color:var(--muted);margin-right:6px}
+.tag.a{background:var(--a-soft);color:var(--a)}.tag.b{background:var(--b-soft);color:var(--b)}.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.chipbtn{font:inherit;font-size:13px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.chipbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chipbtn:focus-visible,.thumb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.erdbox{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:640px}
+.erdbox img{display:block;max-width:none;width:1500px;height:auto;cursor:zoom-in}
+.erdcap{font-size:13px;color:var(--muted);margin-top:8px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.shot{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.shot[hidden]{display:none!important}
+.thumb{display:block;padding:0;border:0;background:var(--surface-2);cursor:zoom-in;aspect-ratio:16/10;overflow:hidden;width:100%}
+.thumb img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.shot figcaption{padding:10px 12px 12px;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.shot figcaption b{color:var(--fg);font-size:14px}
+.flow{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
+.note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:0 8px 8px 0;font-size:14px;margin-top:12px}
+.timeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.tl{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-top:3px solid var(--accent)}
+.tl .d{font-family:var(--mono);font-size:13px;color:var(--accent)}
+.tl ul{margin:6px 0 0;padding-left:18px;font-size:14px}
+.lb{position:fixed;inset:0;background:rgba(8,12,24,.88);display:flex;flex-direction:column;z-index:20;padding:calc(12px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.lb[hidden]{display:none!important}
+.lb-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#e5e9f5;font-size:14px;padding-bottom:10px}
+.lb-bar button{font:inherit;background:#2a3558;color:#fff;border:1px solid #3d4a7a;border-radius:6px;padding:4px 12px;cursor:pointer}
+.lb-body{flex:1;overflow:auto;border-radius:8px;background:#fff}
+.lb-body img{display:block;max-width:none;margin:0 auto}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--ink-fg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (max-width:860px){.wrap{grid-template-columns:1fr;gap:20px}nav.rail{position:static}nav.rail ol{flex-direction:row;flex-wrap:wrap;gap:4px}nav.rail .lbl{display:none}.erdbox img{width:1100px}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<header class="band"><div class="in">
+  <p class="eyebrow">Database Design · Team Project · Fall 2026</p>
+  <h1>SI-PMS 팀 가이드</h1>
+  <p class="lead">지금까지 구현한 내용을 화면과 스키마 그림으로 한눈에 봅니다. 기본 업무(인력·투입·평가)에 더해 팀원이 제안한 조별 특화 시나리오 두 개를 구현했습니다.</p>
+  <div class="stats">
+    <div class="stat"><b>28</b><span>테이블 (뷰 6)</span></div>
+    <div class="stat"><b>20</b><span>트리거 · 프로시저 5</span></div>
+    <div class="stat"><b>29</b><span>비즈니스 규칙 BR</span></div>
+    <div class="stat"><b>39</b><span>화면·기능 라우트</span></div>
+    <div class="stat"><b>8</b><span>데모 시나리오</span></div>
+    <div class="stat"><b>4.0×</b><span>대표 질의 성능 개선</span></div>
+  </div>
+</div></header>
+
+<div class="wrap">
+<nav class="rail" aria-label="목차"><div class="lbl">목차</div><ol>
+  <li><a href="#start">시작하기</a></li>
+  <li><a href="#new">이번에 추가된 것</a></li>
+  <li><a href="#erd">DB 스키마</a></li>
+  <li><a href="#screens">화면 둘러보기</a></li>
+  <li><a href="#scenarios">조별 특화 시나리오</a></li>
+  <li><a href="#rules">비즈니스 규칙</a></li>
+  <li><a href="#demo">데모 시나리오</a></li>
+  <li><a href="#perf">성능 실험</a></li>
+  <li><a href="#deliver">산출물과 일정</a></li>
+  <li><a href="#todo">남은 일</a></li>
+</ol></nav>
+
+<main>
+<section id="start">
+  <h2>시작하기</h2>
+  <p class="sub">Docker Desktop 과 Python 3 만 있으면 됩니다. 저장소는 비공개라 초대를 수락해야 받을 수 있습니다: <a href="{REPO}">github.com/moovingGun/database-teamproject</a></p>
+  <ol class="steps">
+    <li><div><h4>받기와 DB 기동</h4><pre class="cmd"><code>git clone {REPO}.git && cd database-teamproject
+docker compose up -d</code><button type="button" data-copy="git clone {REPO}.git && cd database-teamproject && docker compose up -d">복사</button></pre></div></li>
+    <li><div><h4>웹 앱 실행 → http://127.0.0.1:5001</h4><pre class="cmd"><code>python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python run.py</code><button type="button" data-copy="python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python run.py">복사</button></pre></div></li>
+    <li><div><h4>데모 계정 (비밀번호 공통 <code>pass1234</code>)</h4>
+      <div class="tbl"><table><thead><tr><th>아이디</th><th>역할</th><th>해 볼 것</th></tr></thead><tbody>
+        <tr><td><code>ceo</code></td><td>경영진</td><td>대시보드, 시점별 투입현황, 직원 검색, 변경요청 승인, 교육 현황</td></tr>
+        <tr><td><code>pm01</code></td><td>PM</td><td>PM 평가, 고객 평가 의뢰, 변경요청 접수·고객 동의·반영</td></tr>
+        <tr><td><code>dev01</code></td><td>개발자</td><td>내 정보·기술, 동료 평가, 내 교육 신청</td></tr>
+        <tr><td><code>edu01</code></td><td>교육 담당자</td><td>역량개선계획 수립, 수료 기록</td></tr>
+      </tbody></table></div>
+      <p style="margin:8px 0 0;font-size:14px">데이터를 처음 상태로 되돌리기: <code>./db/reset.sh</code> · 전 화면 점검: <code>./scripts/smoke_test.sh</code></p></div></li>
+  </ol>
+</section>
+
+<section id="new">
+  <h2>이번에 추가된 것</h2>
+  <p class="sub">팀원 자료(시나리오 2개, 요구사항 정의서 엑셀 초안)를 반영했습니다.</p>
+  <div class="grid2">
+    <div class="card a"><h4><span class="tag a">시나리오 A</span>고객사 변경요청 승인</h4><p>PM 접수 → 검토안 → 경영진 승인 → 고객 동의 → 계획 반영. 변경 전후 종료예정일·계약금액을 이력으로 남깁니다.</p></div>
+    <div class="card b"><h4><span class="tag b">시나리오 B</span>평가 기반 교육 이수</h4><p>교육 담당자가 평가 의견과 보유 기술을 보고 계획을 세우고, 직원이 추천 과정 일정에 신청, 종료 후 수료를 기록합니다.</p></div>
+    <div class="card"><h4><span class="tag ok">10/26 제출</span>요구사항 정의서 (엑셀 양식)</h4><p>팀원 초안 양식에 URQ001~012, 확인 사항 20개(현재 구현안 제안 포함), 추적표 시트를 채웠습니다. <code>docs/01-1_요구사항정의서.xlsx</code></p></div>
+    <div class="card"><h4><span class="tag">설계</span>종료예정일과 실제 종료일 분리</h4><p>변경요청이 계약상 계획을 바꾸므로, 종료 처리 때 계획을 덮어쓰지 않도록 컬럼을 나눴습니다.</p></div>
+    <div class="card"><h4><span class="tag">문서</span>ERD 이미지 · 스크린샷 자동 생성</h4><p>DB 에서 ERD 를, 실제 앱에서 화면을 자동으로 만들어 보고서에 바로 씁니다.</p></div>
+    <div class="card"><h4><span class="tag">검증</span>점검 스크립트</h4><p>전 화면 점검, 쓰기 흐름 점검, DB 규칙 거부 27건을 스크립트 하나씩으로 돌릴 수 있습니다.</p></div>
+  </div>
+</section>
+
+<section id="erd">
+  <h2>DB 스키마 (ERD)</h2>
+  <p class="sub">실제 DB 의 information_schema 에서 자동 생성한 IE(까마귀발) 표기 그림입니다. 관계선 끝: <b>┼┼</b> 정확히 1 · <b>┼○</b> 0 또는 1 · <b>○&lt;</b> 0 이상. 모든 1:N 의 1측 반대편이 ○&lt; 라서 Total:Total 관계가 없습니다. 상세 그림의 ● 는 NOT NULL 입니다. 그림을 누르면 크게 봅니다.</p>
+  <div class="chips" role="tablist" aria-label="ERD 영역">{ERD_TABS}</div>
+  <div class="erdbox"><img id="erdimg" src="erd/00_overview.png" alt="ERD 전체 개요"></div>
+  <p class="erdcap" id="erdcap">전체 개요 — 업무 영역별로 묶었습니다. 상세 탭에서는 각 테이블의 컬럼, PK·FK·UK 를 보여 줍니다. 원본: <code>docs/erd/</code></p>
+</section>
+
+<section id="screens">
+  <h2>화면 둘러보기</h2>
+  <p class="sub">시드 데이터 상태에서 각 역할로 로그인해 자동 촬영한 실제 화면 24장입니다. 그림을 누르면 원본 크기로 봅니다.</p>
+  <div class="chips" role="tablist" aria-label="화면 분류">{GROUP_TABS}</div>
+  <div class="gallery">{GALLERY}</div>
+</section>
+
+<section id="scenarios">
+  <h2>조별 특화 시나리오</h2>
+  <p class="sub">팀원 제안을 그대로 쓰되 두 군데를 바꿨습니다. 바꾼 이유는 <code>docs/07_핵심설계결정.md</code> D-11~D-13 에 있습니다.</p>
+  <h3><span class="tag a">A</span>고객사 변경요청 및 승인 관리</h3>
+  <div class="flow"><pre class="mermaid">
+flowchart LR
+  R["접수<br/>PM"] --> V["검토안 작성<br/>PM · 종료예정일·추가금액"]
+  V --> D{"경영진 결정"}
+  D -->|반려| X["반려"]
+  D -->|승인| C{"고객 동의<br/>PM 이 기록"}
+  C -->|거절| Y["고객 거절"]
+  C -->|동의| A["계획 반영<br/>변경 전후 이력"]
+  C -. "내용 변경 시 새 차수로 재검토" .-> V
+  </pre></div>
+  <div class="tbl" style="margin-top:12px"><table><thead><tr><th>팀 초안</th><th>구현</th><th>이유</th></tr></thead><tbody>
+    <tr><td>변경요청 · 영향분석 · 승인 · 고객동의 · 적용이력 (5개)</td><td><code>change_request</code> ─&lt; <code>change_review</code> ─ <code>change_history</code> (3개)</td><td>승인·동의는 검토안 1건당 한 번씩만 생기는 1:1 정보라 검토안에 합침. 재검토는 검토안 차수로 표현</td></tr>
+    <tr><td>프로젝트 종료일 하나</td><td>종료예정일 <code>end_date</code> + 실제 종료일 <code>actual_end_date</code></td><td>변경요청은 계획(종료예정일)을 바꾸고, 종료 처리는 실제 날짜만 기록</td></tr>
+  </tbody></table></div>
+  <h3><span class="tag b">B</span>프로젝트 평가 기반 역량 개선 및 교육 이수 관리</h3>
+  <div class="tbl"><table><thead><tr><th>팀 초안</th><th>구현</th><th>이유</th></tr></thead><tbody>
+    <tr><td>교육신청및이수(직원번호, 개선계획번호, …)</td><td><code>training_enrollment</code>(개선계획번호, …) — 직원번호 없음</td><td>직원은 계획에서 결정되는 이행 종속. 'A 의 계획으로 B 가 신청' 같은 불일치를 원천 차단</td></tr>
+    <tr><td>계획에 상태 컬럼</td><td>신청 이력에서 계산 (<code>v_training_plan</code>)</td><td>취소·재수강이 섞여도 이력이 곧 상태라 갱신 누락이 없음</td></tr>
+    <tr><td>교육 담당자 = 경영관리 직원 중 지정</td><td><code>staff.is_training_manager</code> + CHECK(경영관리만)</td><td>새 직군을 만들지 않고 지정 여부만 관리</td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="rules">
+  <h2>비즈니스 규칙</h2>
+  <p class="sub">무결성 규칙은 DB 트리거가 지킵니다. 화면을 거치지 않는 SQL 적재에도 똑같이 적용되고, 위반하면 이유가 화면에 그대로 나옵니다.</p>
+  <div class="tbl"><table><thead><tr><th>번호</th><th>내용</th></tr></thead><tbody>
+    <tr><td>BR-01~07</td><td>개발자만 투입, 프로젝트 기간 안, 중복 투입 금지, 같은 기간 투입률 합계 100% 이하, 같은 기간 PM 1명, 직무별 최소 등급</td></tr>
+    <tr><td>BR-02 · 15</td><td>사번·프로젝트번호 자동 채번, 기술등급 변경 이력 자동 기록</td></tr>
+    <tr><td>BR-08~14</td><td>평가는 종료 프로젝트·참여자만, 서브타입 일치, 고객 평가자는 발주처 담당자, 의뢰는 PM, 자기 평가 금지, 대상별 1건</td></tr>
+    <tr><td><span class="tag a">A</span>BR-16~23</td><td>예정·진행 프로젝트만, 발주처 담당자, PM 만 접수·검토, 최신 차수만 처리, 결정 후 수정 금지, 경영진만 승인, 승인 후 고객 동의, 승인+동의 후 반영·중복 반영 금지·투입보다 이른 종료예정일 거부</td></tr>
+    <tr><td><span class="tag b">B</span>BR-24~29</td><td>종료 프로젝트 참여자만 계획 대상, 교육 담당자만 수립, 추천 과정 일정만 신청, 중복 신청·정원 초과 금지, 시작 전 신청·취소, 종료 후 수료 기록</td></tr>
+  </tbody></table></div>
+  <pre class="cmd"><code>docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 --force si_pms &lt; db/demo/constraint_tests.sql</code><button type="button" data-copy="docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 --force si_pms &lt; db/demo/constraint_tests.sql">복사</button></pre>
+  <div class="note">평가 가중치(고객 40 · PM 40 · 동료 20), 등급 기준, 인센티브 지급률, 직무별 최소 등급은 가정값입니다. 엑셀 '팀 확인 필요 사항' 시트의 노란 칸에 회의 결정을 적어 주세요.</div>
+</section>
+
+<section id="demo">
+  <h2>데모 시나리오</h2>
+  <p class="sub">과제 요구는 조원 수의 절반(올림) 개입니다. 8개를 준비했고 S2 가 대표·성능 실험 대상입니다.</p>
+  <div class="tbl"><table><thead><tr><th>#</th><th>시나리오</th><th class="num">조인</th><th>화면</th></tr></thead><tbody>
+    <tr><td>S1</td><td>진행 중 프로젝트별 투입 인원·FTE·PM·직무</td><td class="num">5</td><td><code>/</code></td></tr>
+    <tr><td><b>S2 ★</b></td><td><b>특정 시점에 누가 어느 프로젝트에 어떤 직무로 있었는가</b></td><td class="num">6</td><td><code>/reports/staffing</code></td></tr>
+    <tr><td>S3</td><td>개인별 경력: 참여 이력·보유 기술·총 경력</td><td class="num">10</td><td><code>/employees/&lt;id&gt;</code></td></tr>
+    <tr><td>S4</td><td>평가 종합: 유형별 평균, 가중 종합점수, 등급</td><td class="num">6~10</td><td><code>/reports/evaluations</code></td></tr>
+    <tr><td>S5</td><td>인센티브 기초자료</td><td class="num">6</td><td><code>/reports/incentive</code></td></tr>
+    <tr><td>S6</td><td>투입 후보 검색: 가용성 + 기술 + 등급</td><td class="num">5</td><td><code>/employees</code></td></tr>
+    <tr><td><span class="tag a">A</span>S7</td><td>변경요청 처리 현황 (미처리 포함, 반영 전후 값)</td><td class="num">10</td><td><code>/reports/changes</code></td></tr>
+    <tr><td><span class="tag b">B</span>S8</td><td>평가 결과 + 교육 계획·신청·수료 (미신청 포함)</td><td class="num">9</td><td><code>/reports/training</code></td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="perf">
+  <h2>성능 실험</h2>
+  <p class="sub">S2 질의, 투입 100만 건, 각 5회 중앙값(ms). 커버링 인덱스는 테이블을 읽지 않고 인덱스만 읽어 과거 시점에서도 빨라집니다.</p>
+  <div class="tbl"><table><thead><tr><th>기준일</th><th class="num">A 인덱스 없음</th><th class="num">B 복합 인덱스</th><th class="num">C 커버링 (채택)</th><th class="num">C 개선</th></tr></thead><tbody>
+    <tr><td>2026-06-01 (최근)</td><td class="num">160.8</td><td class="num">42.9</td><td class="num"><b>40.3</b></td><td class="num"><b>4.0×</b></td></tr>
+    <tr><td>2020-06-01 (중간)</td><td class="num">178.0</td><td class="num">174.6</td><td class="num"><b>78.7</b></td><td class="num"><b>2.3×</b></td></tr>
+    <tr><td>2012-06-01 (과거)</td><td class="num">184.7</td><td class="num">184.8</td><td class="num"><b>129.6</b></td><td class="num"><b>1.4×</b></td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="deliver">
+  <h2>산출물과 일정</h2>
+  <div class="timeline">
+    <div class="tl"><div class="d">10/26 (월) · 10%</div><strong>분석 보고</strong><ul><li>요구사항 정의서 <code>01-1_요구사항정의서.xlsx</code></li><li>Problem Description 범위만</li></ul></div>
+    <div class="tl"><div class="d">11/09 (월) · 50%</div><strong>설계 보고</strong><ul><li>요구사항 확장판 + 특화 시나리오 <code>docs/01</code></li><li>ERD <code>docs/erd/</code>, 정의서 <code>docs/03</code>, CRUD <code>docs/04</code></li></ul></div>
+    <div class="tl"><div class="d">11/23 (월) · 20%</div><strong>구축 보고</strong><ul><li>생성·적재 스크립트 <code>db/init</code></li><li>증빙: 실행 결과, 스크린샷</li></ul></div>
+    <div class="tl"><div class="d">12/07 (월) · 20%</div><strong>최종보고서</strong><ul><li>아키텍처, 데모 시나리오 <code>docs/05</code></li><li>성능 <code>docs/06</code>, 설계 결정 <code>docs/07</code></li></ul></div>
+  </div>
+</section>
+
+<section id="todo">
+  <h2>남은 일</h2>
+  <div class="grid2">
+    <div class="card"><h4>10/26 제출</h4><p>엑셀의 조 번호·팀원 정보를 확인하고 LMS 에 제출합니다.</p></div>
+    <div class="card"><h4>가정값 회의</h4><p>엑셀 확인 사항 20개의 노란 칸(결정 내용)을 채웁니다. 오른쪽 열은 현재 구현안입니다.</p></div>
+    <div class="card"><h4>시나리오 선택</h4><p>특화 시나리오 A·B 를 둘 다 낼지, 데모 시나리오를 몇 개 낼지 정합니다.</p></div>
+    <div class="card"><h4>PM 평가의 공백</h4><p>PM 을 'PM 평가'하는 사람이 없습니다. 경영진 평가를 추가할지 정합니다.</p></div>
+  </div>
+</section>
+</main>
+</div>
+
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="이미지 크게 보기">
+  <div class="lb-bar"><span id="lbcap"></span><button type="button" id="lbclose">닫기</button></div>
+  <div class="lb-body"><img id="lbimg" alt=""></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite">복사했습니다</div>
+<script>
+(function(){
+  var toast=document.getElementById('toast'),t;
+  function show(m){toast.textContent=m;toast.classList.add('show');clearTimeout(t);t=setTimeout(function(){toast.classList.remove('show')},1400)}
+  document.querySelectorAll('pre.cmd button').forEach(function(b){b.addEventListener('click',function(){
+    var text=b.getAttribute('data-copy');
+    function fb(){var r=document.createRange();r.selectNodeContents(b.parentNode.querySelector('code'));var s=getSelection();s.removeAllRanges();s.addRange(r);show('선택했습니다. Ctrl/Cmd+C 로 복사하세요')}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){show('복사했습니다')},fb)}else{fb()}
+  })});
+  var lb=document.getElementById('lb'),lbimg=document.getElementById('lbimg'),lbcap=document.getElementById('lbcap');
+  function open(src,cap){lbimg.src=src;lbimg.alt=cap;lbcap.textContent=cap;lb.hidden=false;document.getElementById('lbclose').focus()}
+  function close(){lb.hidden=true;lbimg.removeAttribute('src')}
+  document.getElementById('lbclose').addEventListener('click',close);
+  lb.addEventListener('click',function(e){if(e.target===lb)close()});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!lb.hidden)close()});
+  document.querySelectorAll('.thumb').forEach(function(b){b.addEventListener('click',function(){open(b.dataset.src,b.dataset.cap)})});
+  var erd=document.getElementById('erdimg'),erdcap=document.getElementById('erdcap');
+  erd.addEventListener('click',function(){open(erd.getAttribute('src'),'ERD — '+erd.alt)});
+  document.querySelectorAll('[data-erd]').forEach(function(b){b.addEventListener('click',function(){
+    document.querySelectorAll('[data-erd]').forEach(function(x){x.classList.toggle('on',x===b)});
+    erd.src=b.dataset.erd;erd.alt=b.dataset.cap;
+    erdcap.textContent=b.dataset.cap+(b.dataset.erd.indexOf('00_')>=0?' — 업무 영역별로 묶은 관계도':' — 실선 상자는 이 영역, 점선 상자는 다른 영역의 참조 테이블');
+  })});
+  document.querySelectorAll('[data-g]').forEach(function(b){if(b.tagName!=='BUTTON')return;b.addEventListener('click',function(){
+    var g=b.dataset.g;document.querySelectorAll('button[data-g]').forEach(function(x){x.classList.toggle('on',x===b)});
+    document.querySelectorAll('.shot').forEach(function(s){s.hidden=!(g==='all'||s.dataset.g===g)});
+  })});
+})();
+</script>
+'''
+OUT.write_text(PAGE.replace("{REPO}", REPO).replace("{ERD_TABS}", erd_tabs).replace("{GROUP_TABS}", group_tabs)
+               .replace("{GALLERY}", gallery), encoding="utf-8")
+print("wrote", OUT, OUT.stat().st_size // 1024, "KB")
