@@ -10,8 +10,9 @@ import pymysql
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "03_테이블정의서.md"
 DB = os.environ.get("DB_NAME", "si_pms")
+# 트리거 목록(information_schema.TRIGGERS)은 TRIGGER 권한이 있어야 보이므로, 권한이 좁혀진 앱 계정(pms) 대신 root 로 읽는다
 conn = pymysql.connect(host=os.environ.get("DB_HOST", "127.0.0.1"), port=int(os.environ.get("DB_PORT", "3306")),
-                       user=os.environ.get("DB_USER", "pms"), password=os.environ.get("DB_PASSWORD", "pms1234"),
+                       user=os.environ.get("DB_ADMIN_USER", "root"), password=os.environ.get("DB_ADMIN_PASSWORD", "root1234"),
                        database="information_schema", charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
 cur = conn.cursor()
 
@@ -98,7 +99,7 @@ lines += ["## 뷰", "", "| 뷰 | 용도 |", "|---|---|",
 lines += ["## 트리거 · 프로시저", "", "| 객체 | 유형 | 대상 | 역할 |", "|---|---|---|---|"]
 role = {"trg_employee_bi": "사번 자동 채번 (BR-02)", "trg_project_bi": "프로젝트번호 자동 채번 (BR-02)",
         "trg_assignment_bi": "투입 검증 (BR-01,03~07)", "trg_assignment_bu": "투입 수정 검증 (BR-01,03~07)",
-        "trg_evaluation_bi": "평가 등록 검증 (BR-08,09)", "trg_customer_eval_bi": "고객 평가 검증 (BR-10,11,12)",
+        "trg_evaluation_bi": "평가 등록 검증 (BR-08,09)", "trg_customer_eval_bi": "고객 평가 검증·피평가자당 1건 (BR-10,11,12)",
         "trg_pm_eval_bi": "PM 평가 검증 (BR-10,13)", "trg_peer_eval_bi": "동료 평가 검증 (BR-10,14)",
         "trg_developer_bu": "등급 변경일 갱신 (BR-15)", "trg_developer_au": "등급 변경 이력 기록 (BR-15)",
         "trg_developer_bi": "개발자 서브타입 = 판별자 DEV, 지원직과 배타 (BR-30)", "trg_staff_bi": "지원직 서브타입 = 판별자 STAFF, 개발자와 배타 (BR-30)",
@@ -113,7 +114,8 @@ for t in triggers:
 for r in routines:
     desc = {"sp_next_seq": "연도별 일련번호 채번 (행 잠금)", "sp_validate_assignment": "투입 규칙 검증 공통 로직",
             "sp_validate_change_review": "검토안 등록·결정·동의 공통 검증", "sp_sync_change_status": "최신 검토안 기준 요청 상태 계산",
-            "sp_apply_change": "변경 반영: 검증 → 이력 기록 → 종료예정일·계약금액 변경"}.get(r["ROUTINE_NAME"], "")
+            "sp_apply_change": "변경 반영: 검증 → 이력 기록 → 종료예정일·계약금액 변경",
+            "sp_register_employee": "직원 + 서브타입 한 번에 등록, 실패 시 직원 행 제거 (BR-30 전체 참여)"}.get(r["ROUTINE_NAME"], "")
     lines.append(f"| `{r['ROUTINE_NAME']}` | {r['ROUTINE_TYPE']} | - | {desc} |")
 OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 print(f"wrote {OUT} ({len(tcomment)} tables)")

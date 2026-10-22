@@ -5,10 +5,10 @@
 
 | 상태 | 내용 |
 |---|---|
-| ✅ DB | MySQL 8.0 · 테이블 28 · 뷰 6 · 트리거 23 · 프로시저 5 · 외래키 43 |
+| ✅ DB | MySQL 8.0 · 테이블 28 · 뷰 6 · 트리거 23 · 프로시저 6 · 외래키 43 |
 | ✅ 데이터 | 직원 100 (개발자 70 · 지원직 30) · 프로젝트 60 (과거 월평균 동시 수행 10.1개) · 투입 454 · 평가 1,594 · 변경요청 8 · 교육계획 15 |
 | ✅ 웹 앱 | Flask · 39개 라우트, 4개 역할(경영진·PM·개발자·교육 담당자)로 전 화면 점검 통과 |
-| ✅ 규칙 검증 | 비즈니스 규칙 BR-01~30, DB 수준 거부 30건 확인 (`db/demo/constraint_tests.sql`) |
+| ✅ 규칙 검증 | 비즈니스 규칙 BR-01~30, DB 수준 거부 32건 확인 (`db/demo/constraint_tests.sql`) |
 | ✅ 성능 | 투입 100만 건 실험, 커버링 인덱스로 최대 4.0배 개선 |
 | ✅ 문서 | 요구사항 정의서(엑셀 양식) · ERD 이미지 · 테이블 정의서 · CRUD · 데모 시나리오 · 성능 실험 · 설계 결정 |
 
@@ -55,6 +55,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `.venv/bin/python scripts/gen_seed.py` | 시드 SQL 재생성 (고정 seed → 항상 같은 데이터) |
 
 > Docker 초기 적재는 **볼륨이 비어 있을 때 한 번만** 실행됩니다. 스키마를 고쳤다면 `./db/reset.sh` 를 돌리세요.
+> 특히 `04_privileges.sql`(앱 계정 권한)과 `sp_register_employee` 가 추가되기 전부터 쓰던 볼륨이라면, 새 코드를 받은 뒤 `./db/reset.sh` 를 한 번 돌려야 회원가입이 동작합니다.
 
 ---
 
@@ -78,13 +79,13 @@ flowchart LR
   subgraph D["MySQL 8.0 (si_pms)"]
     direction TB
     d1["테이블 28<br/>employee ⊃ developer/staff<br/>evaluation ⊃ customer/pm/peer"]
-    d2["트리거 23 · 프로시저 5<br/>채번 · 서브타입 · 투입 · 평가 · 변경요청 · 교육 검증"]
+    d2["트리거 23 · 프로시저 6<br/>채번 · 서브타입 · 투입 · 평가 · 변경요청 · 교육 검증"]
     d3["뷰 6<br/>v_project_eval_summary · v_change_request · v_training_plan …"]
   end
 ```
 
 ```
-db/init/      00_privileges.sql   01_schema.sql (DDL)   02_logic.sql (프로시저·트리거·뷰)   03_seed.sql (테스트 데이터)
+db/init/      00_privileges.sql   01_schema.sql (DDL)   02_logic.sql (프로시저·트리거·뷰)   03_seed.sql (테스트 데이터)   04_privileges.sql (앱 계정 권한)
 db/demo/      demo_scenarios.sql (S1~S8)   constraint_tests.sql (규칙 검증)
 db/perf/      perf_indexes.sql (성능 인덱스 비교)
 app/          auth · employees · projects · evaluations · reports · changes · training 블루프린트 + templates
@@ -154,9 +155,9 @@ docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4
 |---|---|---|
 | BR-01~07 | 개발자만 투입, 프로젝트 기간 안, 중복 투입 금지, 투입률 합계 100% 이하, 같은 기간 PM 1명, 직무별 최소 등급 | `sp_validate_assignment` (투입 트리거) |
 | BR-02 | 사번 `E+YY+NNNN`, 프로젝트번호 `P+YYYY-NNN` 자동 채번 | `trg_employee_bi`, `trg_project_bi` |
-| BR-08~14 | 평가는 종료 프로젝트·참여자만, 서브타입 일치, 고객 평가자는 발주처 담당자, 의뢰는 PM, 자기평가 금지·1건 | 평가 트리거 4종 |
+| BR-08~14 | 평가는 종료 프로젝트·참여자만, 서브타입 일치, 고객 평가자는 발주처 담당자, 의뢰는 PM, 자기평가 금지, 고객·PM·동료 평가 모두 대상별 1건 | 평가 트리거 4종 |
 | BR-15 | 기술등급 변경 시 이력 자동 기록 | `trg_developer_au` |
-| BR-30 | 직원 서브타입 = 판별자, 개발자·지원직 배타, 서브타입이 있으면 판별자 변경 금지 | `trg_developer_bi`, `trg_staff_bi`, `trg_employee_bu` |
+| BR-30 | 직원 서브타입 = 판별자, 개발자·지원직 배타, 서브타입이 있으면 판별자 변경 금지, 모든 직원은 서브타입 보유(전체 참여) | `trg_developer_bi`, `trg_staff_bi`, `trg_employee_bu`, `sp_register_employee` + 앱 계정 권한(`04_privileges.sql`) |
 | BR-16~23 | [A] 예정·진행 프로젝트만, 발주처 담당자, PM 만 접수·검토, 최신 차수만, 결정 후 수정 금지, 경영진만 승인, 승인 후 동의, 승인+동의 후 반영·중복 금지·투입보다 이른 종료 거부 | 변경요청 트리거·`sp_apply_change` |
 | BR-24~29 | [B] 종료 프로젝트 참여자만 계획 대상, 교육 담당자만 수립, 추천 과정 일정만, 중복 신청·정원 초과 금지, 시작 전 신청·종료 후 수료 | 교육 트리거 |
 

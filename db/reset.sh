@@ -3,7 +3,7 @@
 #   ./db/reset.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
-for f in db/init/00_privileges.sql db/init/01_schema.sql db/init/02_logic.sql db/init/03_seed.sql; do
+for f in db/init/00_privileges.sql db/init/01_schema.sql db/init/02_logic.sql db/init/03_seed.sql db/init/04_privileges.sql; do
   echo ">> $f"
   docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 < "$f"
 done

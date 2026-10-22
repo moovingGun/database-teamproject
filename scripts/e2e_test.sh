@@ -28,6 +28,17 @@ curl -s -b "$T/new" -o "$T/p" --data-urlencode login_id=dev01 "${F[@]}" "$B/auth
 echo "== 2. 회원가입: 새 ID [기대: 사번 E26xxxx 부여]"
 post new /auth/signup --data-urlencode login_id=hong_test01 "${F[@]}"
 login hong_test01 test12345; q "SELECT emp_no, login_id FROM employee e JOIN user_account a USING(emp_id) WHERE login_id='hong_test01'"
+echo "== 2-b. 회원가입: 지원직 [기대: 사번 부여 + staff 서브타입]"
+post new /auth/signup --data-urlencode login_id=kim_staff01 --data-urlencode password=test12345 --data-urlencode password2=test12345 \
+  --data-urlencode emp_name=테스트지원 --data-urlencode resident_reg_no=990606-2123456 --data-urlencode education_level=석사 \
+  --data-urlencode hire_date=2026-10-19 --data-urlencode emp_type=STAFF --data-urlencode department=RND --data-urlencode job_title=연구원
+q "SELECT e.emp_no, e.emp_type, s.department FROM employee e JOIN staff s USING(emp_id) JOIN user_account a USING(emp_id) WHERE login_id='kim_staff01'"
+echo "== 2-c. 앱 계정(pms)이 직원·서브타입에 직접 INSERT/DELETE [기대: ERROR 1142 권한 거부 x2, BR-30 전체 참여]"
+docker exec -i si_pms_db mysql -upms -ppms1234 --default-character-set=utf8mb4 --force si_pms 2>&1 <<'SQL' | grep "ERROR 1142" | sed 's/ at line [0-9]*//'
+INSERT INTO employee (emp_name, resident_reg_no, education_level, hire_date, emp_type) VALUES ('직접등록', '990808-1234567', '학사', CURDATE(), 'DEV');
+DELETE FROM developer WHERE emp_id = 4;
+SQL
+q "SELECT CONCAT('서브타입 없는 직원: ', COUNT(*)) FROM employee e WHERE NOT EXISTS (SELECT 1 FROM developer d WHERE d.emp_id=e.emp_id) AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.emp_id=e.emp_id)"
 
 echo "== 3. PM 평가 입력 → 같은 팀원 재입력 [기대: 성공 후 BR-13 거부]"
 TARGET=$(curl -s -b "$T/pm01" "$B/evaluations" | grep -o 'project_id=[0-9]*&amp;eval_type=PM&amp;evaluatee_emp_id=[0-9]*' | head -1 | sed 's/&amp;/\&/g')
@@ -38,7 +49,7 @@ echo "== 4. 고객 평가: 토큰 링크로 제출 → PM 보고 [기대: REPORT
 TOKEN=$(curl -s -b "$T/pm01" "$B/evaluations" | grep -o '/customer-eval/[0-9a-f]*' | head -1)
 PRJ=$(q "SELECT ev.project_id FROM customer_eval ce JOIN evaluation ev USING(eval_id) WHERE ce.access_token='${TOKEN##*/}'")
 curl -s -o "$T/c" "$B$TOKEN"; A=()
-for i in $(grep -o 'name="score_[0-9]*_1"' "$T/c" | grep -o '[0-9]*_1' | cut -d_ -f1 | sort -u); do A+=(--data-urlencode "score_${i}_1=5" --data-urlencode "score_${i}_2=4"); done
+for i in $(grep -o 'name="score_[0-9]*_1"' "$T/c" | sed 's/name="score_\([0-9]*\)_1"/\1/' | sort -u); do A+=(--data-urlencode "score_${i}_1=5" --data-urlencode "score_${i}_2=4"); done
 curl -s -o "$T/c2" "${A[@]}" "$B$TOKEN"; grep -o '<h1>[^<]*' "$T/c2"
 curl -s -b "$T/pm01" -o /dev/null -X POST "$B/projects/$PRJ/customer-eval/report"
 q "SELECT status, COUNT(*) FROM evaluation WHERE project_id=$PRJ AND eval_type='CUSTOMER' GROUP BY status"
