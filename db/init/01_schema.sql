@@ -21,7 +21,8 @@ CREATE DATABASE IF NOT EXISTS si_pms
 USE si_pms;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS change_history, change_review, change_request,
+DROP TABLE IF EXISTS training_enrollment, development_plan, training_session, training_course,
+  change_history, change_review, change_request,
   grade_history, eval_detail, eval_item, eval_type_weight,
   peer_eval, pm_eval, customer_eval, evaluation,
   assignment, job_role, project_skill, project,
@@ -100,7 +101,9 @@ CREATE TABLE staff (
   emp_id     INT         NOT NULL COMMENT '직원 ID (PK, FK → employee)',
   department ENUM('MARKETING','MANAGEMENT','RND') NOT NULL COMMENT '부서 (마케팅 / 경영관리 / 연구개발)',
   job_title  VARCHAR(50) NULL     COMMENT '직책',
+  is_training_manager TINYINT(1) NOT NULL DEFAULT 0 COMMENT '교육 담당자 지정 여부 (경영관리 직원 중에서 지정)',
   PRIMARY KEY (emp_id),
+  CONSTRAINT chk_staff_trainer CHECK (is_training_manager = 0 OR department = 'MANAGEMENT'),
   CONSTRAINT fk_staff_employee FOREIGN KEY (emp_id) REFERENCES employee (emp_id) ON DELETE CASCADE
 ) COMMENT='지원직 (직원 서브타입: 마케팅·경영관리·연구개발)';
 
@@ -364,3 +367,64 @@ CREATE TABLE change_history (
   CONSTRAINT fk_history_review  FOREIGN KEY (review_id)         REFERENCES change_review (review_id),
   CONSTRAINT fk_history_applier FOREIGN KEY (applied_by_emp_id) REFERENCES employee (emp_id)
 ) COMMENT='변경 적용 이력 (프로젝트 계획 변경 전후 값)';
+
+-- ---------------------------------------------------------------------
+-- 8. [조별 특화 시나리오 B] 프로젝트 평가 기반 역량 개선 및 교육 이수 관리
+--    교육과정(1) ─< 교육일정(N)        역량개선계획(N) >─ 교육과정(1, 추천)
+--    역량개선계획(1) ─< 교육신청·이수(N) >─ 교육일정(1)
+--    신청 테이블에는 직원번호를 두지 않음 (계획에서 결정되는 이행 종속 제거, docs/07 D-12)
+-- ---------------------------------------------------------------------
+CREATE TABLE training_course (
+  course_id   INT          NOT NULL AUTO_INCREMENT COMMENT '교육과정 ID (PK)',
+  course_name VARCHAR(100) NOT NULL COMMENT '교육명',
+  field       ENUM('TECH','COMM','MGMT','QUALITY') NOT NULL COMMENT '교육 분야 (기술 / 의사소통 / 관리 / 품질)',
+  skill_id    INT          NULL     COMMENT '관련 기술 (FK → skill, 선택: 의사소통 교육처럼 기술과 무관하면 NULL)',
+  description VARCHAR(500) NULL     COMMENT '교육 내용',
+  PRIMARY KEY (course_id),
+  UNIQUE KEY uk_course_name (course_name),
+  CONSTRAINT fk_course_skill FOREIGN KEY (skill_id) REFERENCES skill (skill_id)
+) COMMENT='교육과정';
+
+CREATE TABLE training_session (
+  session_id INT          NOT NULL AUTO_INCREMENT COMMENT '교육일정 ID (PK)',
+  course_id  INT          NOT NULL COMMENT '교육과정 (FK)',
+  start_at   DATETIME     NOT NULL COMMENT '시작일시',
+  end_at     DATETIME     NOT NULL COMMENT '종료일시',
+  place      VARCHAR(100) NOT NULL COMMENT '장소',
+  capacity   SMALLINT     NOT NULL COMMENT '정원',
+  PRIMARY KEY (session_id),
+  CONSTRAINT fk_session_course FOREIGN KEY (course_id) REFERENCES training_course (course_id),
+  CONSTRAINT chk_session_period CHECK (start_at < end_at),
+  CONSTRAINT chk_session_capacity CHECK (capacity > 0)
+) COMMENT='교육일정 (같은 교육과정을 여러 차례 개설)';
+
+CREATE TABLE development_plan (
+  plan_id          INT          NOT NULL AUTO_INCREMENT COMMENT '역량개선계획 ID (PK)',
+  emp_id           INT          NOT NULL COMMENT '대상 개발자 (FK → developer)',
+  project_id       INT          NOT NULL COMMENT '근거 프로젝트 (FK, 대상자가 참여한 종료 프로젝트)',
+  course_id        INT          NOT NULL COMMENT '추천 교육과정 (FK)',
+  manager_emp_id   INT          NOT NULL COMMENT '교육 담당자 (FK → staff, 교육 담당자로 지정된 경영관리 직원)',
+  improvement_goal VARCHAR(200) NOT NULL COMMENT '개선 목표',
+  reason           VARCHAR(500) NOT NULL COMMENT '추천 사유 (평가 내용·보유 기술 검토 결과)',
+  created_date     DATE         NOT NULL COMMENT '수립일',
+  due_date         DATE         NOT NULL COMMENT '이수 목표일',
+  PRIMARY KEY (plan_id),
+  CONSTRAINT fk_plan_developer FOREIGN KEY (emp_id)         REFERENCES developer (emp_id),
+  CONSTRAINT fk_plan_project   FOREIGN KEY (project_id)     REFERENCES project (project_id),
+  CONSTRAINT fk_plan_course    FOREIGN KEY (course_id)      REFERENCES training_course (course_id),
+  CONSTRAINT fk_plan_manager   FOREIGN KEY (manager_emp_id) REFERENCES staff (emp_id),
+  CONSTRAINT chk_plan_due CHECK (created_date <= due_date)
+) COMMENT='역량개선계획 (직원 1명 × 추천 교육과정 1개)';
+
+CREATE TABLE training_enrollment (
+  enroll_id    INT        NOT NULL AUTO_INCREMENT COMMENT '신청 ID (PK)',
+  plan_id      INT        NOT NULL COMMENT '역량개선계획 (FK, 신청 직원은 계획 대상자)',
+  session_id   INT        NOT NULL COMMENT '교육일정 (FK, 계획의 추천 과정 일정)',
+  applied_at   DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '신청일시',
+  status       ENUM('APPLIED','CANCELLED','COMPLETED','NOT_COMPLETED') NOT NULL DEFAULT 'APPLIED' COMMENT '신청 상태 (신청 / 취소 / 수료 / 미수료)',
+  attended     TINYINT(1) NULL     COMMENT '출석 여부 (교육 종료 후 기록)',
+  processed_at DATETIME   NULL     COMMENT '취소 또는 수료 처리 일시',
+  PRIMARY KEY (enroll_id),
+  CONSTRAINT fk_enroll_plan    FOREIGN KEY (plan_id)    REFERENCES development_plan (plan_id),
+  CONSTRAINT fk_enroll_session FOREIGN KEY (session_id) REFERENCES training_session (session_id)
+) COMMENT='교육 신청 및 이수 (취소·미수료 이력 보존, 재수강은 새 행)';

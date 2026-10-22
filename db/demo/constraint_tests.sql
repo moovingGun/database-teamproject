@@ -131,5 +131,56 @@ INSERT INTO change_request (project_id, contact_id, received_by_emp_id, request_
 VALUES (@cr_prj, @cr_contact, @cr_pm, CURDATE(), '채번 확인', '채번 확인');
 SELECT cr_no, status FROM change_request ORDER BY cr_id DESC LIMIT 1;
 
+-- ---------------------------------------------------------------------
+-- [조별 특화 시나리오 B] 역량 개선·교육 규칙 (BR-24 ~ BR-29)
+-- ---------------------------------------------------------------------
+SET @trainer := (SELECT emp_id FROM staff WHERE is_training_manager = 1 LIMIT 1);
+SET @not_trainer := (SELECT emp_id FROM staff WHERE is_training_manager = 0 AND department = 'MANAGEMENT' LIMIT 1);
+-- 같은 과정을 추천받은 계획이 2건 이상인 과정의 첫 계획 (정원 초과 검사에 다른 대상자가 필요)
+SET @pl := (SELECT MIN(plan_id) FROM development_plan
+             WHERE course_id = (SELECT course_id FROM development_plan GROUP BY course_id HAVING COUNT(*) >= 2 ORDER BY course_id LIMIT 1));
+SET @pl_course := (SELECT course_id FROM development_plan WHERE plan_id = @pl);
+SET @pl_emp := (SELECT emp_id FROM development_plan WHERE plan_id = @pl);
+SET @future_ok := (SELECT session_id FROM training_session WHERE course_id = @pl_course AND start_at > NOW()
+                     AND session_id NOT IN (SELECT te.session_id FROM training_enrollment te JOIN development_plan dp USING (plan_id)
+                                             WHERE dp.emp_id = @pl_emp AND te.status <> 'CANCELLED') ORDER BY start_at LIMIT 1);
+SET @future_other := (SELECT session_id FROM training_session WHERE course_id <> @pl_course AND start_at > NOW() LIMIT 1);
+SET @past_ok := (SELECT session_id FROM training_session WHERE course_id = @pl_course AND start_at < NOW() LIMIT 1);
+
+SELECT '[BR-24] 진행 중 프로젝트를 근거로 계획 수립 → 거부' AS test;
+INSERT INTO development_plan (emp_id, project_id, course_id, manager_emp_id, improvement_goal, reason, created_date, due_date)
+VALUES (@pl_emp, @prj_inprog, 1, @trainer, 'x', 'x', CURDATE(), CURDATE());
+
+SELECT '[BR-25] 교육 담당자가 아닌 직원이 계획 수립 → 거부' AS test;
+INSERT INTO development_plan (emp_id, project_id, course_id, manager_emp_id, improvement_goal, reason, created_date, due_date)
+SELECT emp_id, project_id, 1, @not_trainer, 'x', 'x', CURDATE(), CURDATE() FROM development_plan WHERE plan_id = @pl;
+
+SELECT '[CHECK] 경영관리가 아닌 직원을 교육 담당자로 지정 → 거부' AS test;
+UPDATE staff SET is_training_manager = 1 WHERE department = 'MARKETING' LIMIT 1;
+
+SELECT '[BR-26] 추천 과정이 아닌 일정에 신청 → 거부' AS test;
+INSERT INTO training_enrollment (plan_id, session_id) VALUES (@pl, @future_other);
+
+SELECT '[BR-29] 이미 시작한 일정에 신청 → 거부' AS test;
+INSERT INTO training_enrollment (plan_id, session_id) VALUES (@pl, @past_ok);
+
+SELECT '[정상] 추천 과정의 예정 일정에 신청 → 성공' AS test;
+INSERT INTO training_enrollment (plan_id, session_id) VALUES (@pl, @future_ok);
+SELECT ROW_COUNT() AS inserted_rows;
+
+SELECT '[BR-27] 같은 일정 중복 신청 → 거부' AS test;
+INSERT INTO training_enrollment (plan_id, session_id) VALUES (@pl, @future_ok);
+
+SELECT '[BR-29] 시작 전 교육에 수료 기록 → 거부' AS test;
+UPDATE training_enrollment SET status = 'COMPLETED' WHERE plan_id = @pl AND session_id = @future_ok AND status = 'APPLIED';
+
+SELECT '[BR-28] 정원이 찬 일정 신청 → 거부' AS test;
+UPDATE training_session SET capacity = (SELECT COUNT(*) FROM training_enrollment WHERE session_id = @future_ok AND status <> 'CANCELLED') WHERE session_id = @future_ok;
+INSERT INTO training_enrollment (plan_id, session_id)
+SELECT dp.plan_id, @future_ok FROM development_plan dp
+ WHERE dp.course_id = @pl_course AND dp.emp_id <> @pl_emp
+   AND NOT EXISTS (SELECT 1 FROM training_enrollment x JOIN development_plan y USING (plan_id)
+                    WHERE x.session_id = @future_ok AND y.emp_id = dp.emp_id AND x.status <> 'CANCELLED') LIMIT 1;
+
 ROLLBACK;
 SELECT '검증 종료 (ROLLBACK 완료 - 데이터 변경 없음)' AS done;

@@ -29,6 +29,14 @@ SET NAMES utf8mb4;
 --   BR-22 고객 동의는 내부 승인 후에만, 동의 담당자는 해당 발주처 소속
 --   BR-23 내부 승인 + 고객 동의가 모두 끝난 검토안만 반영, 같은 검토안 중복 반영 금지,
 --         반영 시 변경 전후 값 이력 보존, 새 종료예정일보다 늦게 끝나는 투입이 있으면 거부
+--   ── 조별 특화 시나리오 B: 평가 기반 역량 개선 및 교육 이수 관리 ──
+--   BR-24 역량개선계획의 대상은 근거 프로젝트(종료)에 참여한 개발자
+--   BR-25 계획은 교육 담당자로 지정된 경영관리 직원만 수립
+--   BR-26 신청한 일정은 계획에서 추천한 교육과정의 일정이어야 함
+--   BR-27 같은 직원은 같은 일정에 중복 신청 불가 (취소 건 제외)
+--   BR-28 일정별 정원 초과 신청 불가
+--   BR-29 신청은 교육 시작 전에만, 수료·미수료 기록은 교육 종료 후 신청 건에만
+--   (수료가 기술등급을 자동으로 바꾸지 않음: 두 데이터 사이에 트리거를 두지 않음)
 -- =====================================================================
 USE si_pms;
 
@@ -54,6 +62,10 @@ DROP TRIGGER   IF EXISTS trg_change_review_ai;
 DROP TRIGGER   IF EXISTS trg_change_review_au;
 DROP TRIGGER   IF EXISTS trg_change_history_bi;
 DROP TRIGGER   IF EXISTS trg_change_history_ai;
+DROP TRIGGER   IF EXISTS trg_development_plan_bi;
+DROP TRIGGER   IF EXISTS trg_enrollment_bi;
+DROP TRIGGER   IF EXISTS trg_enrollment_bu;
+DROP VIEW      IF EXISTS v_training_plan;
 DROP VIEW      IF EXISTS v_change_request;
 DROP VIEW      IF EXISTS v_project_eval_summary;
 DROP VIEW      IF EXISTS v_eval_score;
@@ -494,6 +506,75 @@ BEGIN
   UPDATE project SET end_date = v_new_end, contract_amount = IFNULL(v_amount, 0) + v_add WHERE project_id = v_project;
 END$$
 
+-- =====================================================================
+-- [조별 특화 시나리오 B] 역량 개선 및 교육 이수 관리 (BR-24 ~ BR-29)
+-- =====================================================================
+CREATE TRIGGER trg_development_plan_bi BEFORE INSERT ON development_plan FOR EACH ROW
+BEGIN
+  DECLARE v_status VARCHAR(20);
+  DECLARE v_cnt INT DEFAULT 0;
+  SELECT status INTO v_status FROM project WHERE project_id = NEW.project_id;
+  IF v_status <> 'COMPLETED' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-24] 역량개선계획은 종료된 프로젝트의 평가를 근거로만 수립할 수 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM assignment WHERE project_id = NEW.project_id AND emp_id = NEW.emp_id;
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-24] 계획 대상자는 근거 프로젝트에 참여한 개발자여야 합니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM staff WHERE emp_id = NEW.manager_emp_id AND is_training_manager = 1;
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-25] 역량개선계획은 교육 담당자로 지정된 직원만 수립할 수 있습니다.';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_enrollment_bi BEFORE INSERT ON training_enrollment FOR EACH ROW
+BEGIN
+  DECLARE v_emp INT;
+  DECLARE v_plan_course INT;
+  DECLARE v_course INT;
+  DECLARE v_start DATETIME;
+  DECLARE v_cap SMALLINT;
+  DECLARE v_cnt INT DEFAULT 0;
+  DECLARE v_msg VARCHAR(128);
+  SELECT emp_id, course_id INTO v_emp, v_plan_course FROM development_plan WHERE plan_id = NEW.plan_id;
+  SELECT course_id, start_at, capacity INTO v_course, v_start, v_cap FROM training_session WHERE session_id = NEW.session_id FOR UPDATE;
+  IF v_course <> v_plan_course THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-26] 계획에서 추천한 교육과정의 일정에만 신청할 수 있습니다.';
+  END IF;
+  IF NEW.applied_at >= v_start THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-29] 이미 시작한 교육일정에는 신청할 수 없습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM training_enrollment te JOIN development_plan dp ON dp.plan_id = te.plan_id
+   WHERE te.session_id = NEW.session_id AND dp.emp_id = v_emp AND te.status <> 'CANCELLED';
+  IF v_cnt > 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-27] 같은 교육일정에 이미 신청한 기록이 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM training_enrollment WHERE session_id = NEW.session_id AND status <> 'CANCELLED';
+  IF v_cnt >= v_cap THEN
+    SET v_msg = CONCAT('[BR-28] 정원이 찼습니다. (정원 ', v_cap, '명, 신청 ', v_cnt, '명)');
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+  END IF;
+END$$
+
+CREATE TRIGGER trg_enrollment_bu BEFORE UPDATE ON training_enrollment FOR EACH ROW
+BEGIN
+  DECLARE v_start DATETIME;
+  DECLARE v_end DATETIME;
+  IF NEW.status <> OLD.status THEN
+    SELECT start_at, end_at INTO v_start, v_end FROM training_session WHERE session_id = NEW.session_id;
+    IF OLD.status <> 'APPLIED' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-29] 이미 처리된 신청입니다. 재수강은 다른 일정에 새로 신청하세요.';
+    END IF;
+    IF NEW.status = 'CANCELLED' AND NOW() >= v_start THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-29] 이미 시작한 교육은 취소할 수 없습니다.';
+    END IF;
+    IF NEW.status IN ('COMPLETED', 'NOT_COMPLETED') AND NOW() < v_end THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-29] 수료 여부는 교육이 끝난 뒤에 기록할 수 있습니다.';
+    END IF;
+    SET NEW.processed_at = NOW();
+  END IF;
+END$$
+
 DELIMITER ;
 
 -- ---------------------------------------------------------------------
@@ -580,3 +661,30 @@ SELECT cr.cr_id, cr.cr_no, cr.status, cr.request_date, cr.title, cr.content, cr.
   LEFT JOIN client_contact ccs ON ccs.contact_id = rv.consent_contact_id
   LEFT JOIN change_history h ON h.review_id = rv.review_id
   LEFT JOIN employee ap ON ap.emp_id = h.applied_by_emp_id;
+
+-- [시나리오 B 데모 S8] 계획 ⋈ 직원 ⋈ 프로젝트 ⋈ 평가 종합 ⋈ 추천 과정 ⋈ 담당자 ⋈ (최근 신청 ⋈ 일정)
+--   이수 상태는 저장하지 않고 신청 이력에서 계산 (수료 > 신청 > 미수료 > 미신청)
+CREATE VIEW v_training_plan AS
+SELECT dp.plan_id, dp.emp_id, e.emp_no, e.emp_name, d.skill_grade,
+       dp.project_id, p.project_code, p.project_name,
+       es.weighted_score, es.incentive_grade,
+       (SELECT ROUND(AVG(vs.comm_score), 2) FROM v_eval_score vs WHERE vs.project_id = dp.project_id AND vs.evaluatee_emp_id = dp.emp_id) AS comm_avg,
+       (SELECT ROUND(AVG(vs.work_score), 2) FROM v_eval_score vs WHERE vs.project_id = dp.project_id AND vs.evaluatee_emp_id = dp.emp_id) AS work_avg,
+       dp.course_id, tc.course_name, tc.field, sk.skill_name,
+       dp.manager_emp_id, m.emp_name AS manager_name,
+       dp.improvement_goal, dp.reason, dp.created_date, dp.due_date,
+       CASE WHEN EXISTS (SELECT 1 FROM training_enrollment x WHERE x.plan_id = dp.plan_id AND x.status = 'COMPLETED') THEN 'COMPLETED'
+            WHEN EXISTS (SELECT 1 FROM training_enrollment x WHERE x.plan_id = dp.plan_id AND x.status = 'APPLIED') THEN 'APPLIED'
+            WHEN EXISTS (SELECT 1 FROM training_enrollment x WHERE x.plan_id = dp.plan_id AND x.status = 'NOT_COMPLETED') THEN 'NOT_COMPLETED'
+            ELSE 'NOT_APPLIED' END AS plan_status,
+       le.enroll_id, le.status AS last_enroll_status, ts.start_at AS last_session_start, ts.place AS last_session_place
+  FROM development_plan dp
+  JOIN employee  e  ON e.emp_id = dp.emp_id
+  JOIN developer d  ON d.emp_id = dp.emp_id
+  JOIN project   p  ON p.project_id = dp.project_id
+  JOIN training_course tc ON tc.course_id = dp.course_id
+  LEFT JOIN skill sk ON sk.skill_id = tc.skill_id
+  JOIN employee  m  ON m.emp_id = dp.manager_emp_id
+  LEFT JOIN v_project_eval_summary es ON es.project_id = dp.project_id AND es.evaluatee_emp_id = dp.emp_id
+  LEFT JOIN training_enrollment le ON le.enroll_id = (SELECT MAX(y.enroll_id) FROM training_enrollment y WHERE y.plan_id = dp.plan_id)
+  LEFT JOIN training_session ts ON ts.session_id = le.session_id;

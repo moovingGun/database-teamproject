@@ -69,7 +69,10 @@ def index():
         (me, me, me), one=True)
     received = db.query("""SELECT s.*, p.project_code, p.project_name FROM v_project_eval_summary s JOIN project p ON p.project_id = s.project_id
                            WHERE s.evaluatee_emp_id = %s ORDER BY p.end_date DESC LIMIT 5""", (me,))
-    return render_template("dashboard_emp.html", current=current, upcoming=upcoming, todo=todo["cnt"], received=received)
+    training_todo = db.query("SELECT COUNT(*) AS cnt FROM v_training_plan WHERE emp_id = %s AND plan_status IN ('NOT_APPLIED','NOT_COMPLETED')",
+                             (me,), one=True)["cnt"]
+    return render_template("dashboard_emp.html", current=current, upcoming=upcoming, todo=todo["cnt"], received=received,
+                           training_todo=training_todo)
 
 
 @bp.get("/reports/staffing")

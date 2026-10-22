@@ -41,6 +41,19 @@ def executive_required(view):
     return wrapped
 
 
+def trainer_required(view):
+    """교육 담당자(경영관리 직원 중 지정) 전용. 경영진은 조회만 하므로 여기서 제외"""
+    @wraps(view)
+    def wrapped(*a, **kw):
+        user = session.get("user")
+        if not user:
+            return redirect(url_for("auth.login", next=request.path))
+        if not user.get("is_trainer"):
+            abort(403)
+        return view(*a, **kw)
+    return wrapped
+
+
 def login_id_taken(login_id):
     return db.query("SELECT 1 FROM user_account WHERE login_id = %s", (login_id,), one=True) is not None
 
@@ -131,12 +144,13 @@ def login():
         login_id = (request.form.get("login_id") or "").strip().lower()
         row = db.query(
             """SELECT a.emp_id, a.login_id, a.password_hash, a.auth_role, a.is_active,
-                      e.emp_name, e.emp_no, e.emp_type
+                      e.emp_name, e.emp_no, e.emp_type, IFNULL(s.is_training_manager, 0) AS is_trainer
                  FROM user_account a JOIN employee e ON e.emp_id = a.emp_id
+                 LEFT JOIN staff s ON s.emp_id = a.emp_id
                 WHERE a.login_id = %s""", (login_id,), one=True)
         if row and row["is_active"] and check_password_hash(row["password_hash"], request.form.get("password") or ""):
             session.clear()
-            session["user"] = {k: row[k] for k in ("emp_id", "login_id", "auth_role", "emp_name", "emp_no", "emp_type")}
+            session["user"] = {k: row[k] for k in ("emp_id", "login_id", "auth_role", "emp_name", "emp_no", "emp_type", "is_trainer")}
             db.execute("UPDATE user_account SET last_login_at = NOW() WHERE emp_id = %s", (row["emp_id"],))
             db.commit()
             return redirect(request.args.get("next") or url_for("reports.index"))

@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}교육 이수 현황{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>역량 개선·교육 이수 현황 <span class="muted small">— 조별 특화 시나리오 B · 데모 시나리오 S8</span></h1>
+<form method="get" class="inline"><select name="status" onchange="this.form.submit()"><option value="">전체 상태</option>{% for k,v in plan_ko.items() %}<option value="{{ k }}" {{ 'selected' if status==k }}>{{ v }} ({{ counts.get(k, 0) }})</option>{% endfor %}</select></form></div>
+<div class="grid kpi">{% for k,v in plan_ko.items() %}<div class="card"><div class="num">{{ counts.get(k, 0) }}</div><div class="lbl">{{ v }}</div></div>{% endfor %}</div>
+<h2>직원별 평가 결과와 교육 계획</h2>
+<div class="card"><p class="muted small">아직 신청하지 않은 계획도 추천 과정과 이수 목표일과 함께 보입니다.</p><div style="overflow-x:auto"><table>
+<thead><tr><th>직원</th><th>근거 프로젝트</th><th class="right">종합점수</th><th class="right">업무 / 소통</th><th>추천 교육</th><th>이수 목표일</th><th>상태</th><th>최근 신청</th></tr></thead><tbody>
+{% for r in rows %}<tr><td><a href="{{ url_for('employees.detail', emp_id=r.emp_id) }}">{{ r.emp_name }}</a> <span class="muted small">{{ r.skill_grade }}</span></td><td class="small">{{ r.project_code }}</td>
+<td class="right">{{ r.weighted_score or '-' }}</td><td class="right small">{{ r.work_avg or '-' }} / {{ r.comm_avg or '-' }}</td><td class="small">{{ r.course_name }}</td><td>{{ r.due_date }}</td>
+<td><span class="badge {{ r.plan_status }}">{{ plan_ko[r.plan_status] }}</span></td>
+<td class="small">{% if r.enroll_id %}{{ r.last_session_start.strftime('%Y-%m-%d') }} · {{ enroll_ko[r.last_enroll_status] }}{% else %}<span class="muted">없음</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></div>
+<h2>교육과정별 수요</h2>
+<div class="card"><table><thead><tr><th>교육과정</th><th>분야</th><th class="right">계획</th><th class="right">미신청</th><th class="right">신청</th><th class="right">수료</th><th class="right">예정 일정</th></tr></thead><tbody>
+{% for d in demand %}<tr><td>{{ d.course_name }}</td><td>{{ field_ko[d.field] }}</td><td class="right">{{ d.plans }}</td><td class="right">{{ d.not_applied or 0 }}</td><td class="right">{{ d.applied or 0 }}</td><td class="right">{{ d.completed or 0 }}</td><td class="right">{{ d.upcoming_sessions }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}교육 관리{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>역량 개선·교육 관리 <span class="muted small">— 조별 특화 시나리오 B · 교육 담당자</span></h1>
+<a class="btn secondary" href="{{ url_for('training.report') }}">이수 현황 리포트</a></div>
+<p class="muted small">점수가 낮다는 이유만으로 교육을 자동 배정하지 않습니다. 평가 의견과 보유 기술을 확인한 뒤 담당자가 계획을 등록합니다.</p>
+
+{% if pending %}<h2>수료 기록 대기 ({{ pending|length }}건)</h2>
+<div class="card"><table><thead><tr><th>직원</th><th>교육</th><th>일정</th><th>장소</th><th></th></tr></thead><tbody>
+{% for e in pending %}<tr><td>{{ e.emp_name }}</td><td>{{ e.course_name }}</td><td>{{ e.start_at.strftime('%Y-%m-%d') }} ~ {{ e.end_at.strftime('%m-%d') }}</td><td>{{ e.place }}</td>
+<td class="right"><form method="post" action="{{ url_for('training.record_result', enroll_id=e.enroll_id) }}" class="inline" style="justify-content:flex-end">
+<button name="result" value="COMPLETED" class="sm">수료</button><input type="hidden" name="attended" value="1"><button name="result" value="NOT_COMPLETED" class="sm danger">미수료</button></form></td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+
+<h2>검토 대상 — 종료 프로젝트 평가 종합점수 낮은 순</h2>
+<div class="card"><table><thead><tr><th>직원</th><th>등급</th><th>프로젝트</th><th class="right">종합</th><th class="right">업무수행</th><th class="right">커뮤니케이션</th><th></th></tr></thead><tbody>
+{% for c in candidates %}<tr><td>{{ c.emp_name }}</td><td>{{ c.skill_grade }}</td><td class="small">{{ c.project_code }} {{ c.project_name }}</td>
+<td class="right"><span class="badge {{ 'C' if c.weighted_score < 3 else 'B' }}">{{ c.weighted_score }}</span></td><td class="right">{{ c.work_avg }}</td><td class="right">{{ c.comm_avg }}</td>
+<td class="right"><a class="btn sm" href="{{ url_for('training.new_plan', emp_id=c.emp_id, project_id=c.project_id) }}">검토 후 계획 수립</a></td></tr>{% endfor %}
+</tbody></table></div>
+
+<h2>역량개선계획 ({{ plans|length }}건)</h2>
+<div class="card"><div style="overflow-x:auto"><table><thead><tr><th>수립일</th><th>직원</th><th>근거 프로젝트</th><th>추천 교육</th><th>개선 목표</th><th>이수 목표일</th><th>상태</th></tr></thead><tbody>
+{% for pl in plans %}<tr><td>{{ pl.created_date }}</td><td>{{ pl.emp_name }}</td><td class="small">{{ pl.project_code }}</td><td class="small">{{ pl.course_name }} <span class="muted">({{ field_ko[pl.field] }})</span></td>
+<td class="small">{{ pl.improvement_goal }}</td><td>{{ pl.due_date }}</td><td><span class="badge {{ pl.plan_status }}">{{ plan_ko[pl.plan_status] }}</span></td></tr>{% endfor %}
+</tbody></table></div></div>
+
+<h2>예정된 교육일정</h2>
+<div class="card"><table><thead><tr><th>교육</th><th>분야</th><th>일정</th><th>장소</th><th class="right">신청 / 정원</th></tr></thead><tbody>
+{% for s in sessions %}<tr><td>{{ s.course_name }}</td><td>{{ field_ko[s.field] }}</td><td>{{ s.start_at.strftime('%Y-%m-%d %H:%M') }} ~ {{ s.end_at.strftime('%m-%d') }}</td><td>{{ s.place }}</td>
+<td class="right seat {{ 'full' if s.enrolled >= s.capacity }}">{{ s.enrolled }} / {{ s.capacity }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

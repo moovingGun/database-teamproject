@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}내 교육{% endblock %}
+{% block content %}
+<h1>내 교육 계획 <span class="muted small">— 조별 특화 시나리오 B</span></h1>
+<p class="muted small">교육 담당자가 프로젝트 평가와 보유 기술을 검토해 추천한 교육입니다. 추천 과정의 개설 일정 중 하나에 신청하세요. 수료해도 기술등급은 별도 확인 절차로 변경됩니다.</p>
+{% for pl in plans %}
+<div class="card"><div class="toolbar" style="margin-bottom:6px"><h3 style="margin:0">{{ pl.course_name }} <span class="muted small">({{ field_ko[pl.field] }})</span></h3>
+<span class="badge {{ pl.plan_status }}">{{ plan_ko[pl.plan_status] }}</span></div>
+<p class="small" style="margin:0 0 10px">개선 목표: {{ pl.improvement_goal }} · 이수 목표일 {{ pl.due_date }} · 근거 {{ pl.project_code }} {{ pl.project_name }} · 담당 {{ pl.manager_name }}<br><span class="muted">{{ pl.reason }}</span></p>
+{% if pl.plan_status != 'COMPLETED' %}
+  {% if pl.sessions %}<table><thead><tr><th>개설 일정</th><th>장소</th><th class="right">신청 / 정원</th><th></th></tr></thead><tbody>
+  {% for s in pl.sessions %}<tr><td>{{ s.start_at.strftime('%Y-%m-%d %H:%M') }} ~ {{ s.end_at.strftime('%m-%d') }}</td><td>{{ s.place }}</td><td class="right seat {{ 'full' if s.enrolled >= s.capacity }}">{{ s.enrolled }} / {{ s.capacity }}</td>
+  <td class="right"><form method="post" action="{{ url_for('training.apply') }}"><input type="hidden" name="plan_id" value="{{ pl.plan_id }}"><input type="hidden" name="session_id" value="{{ s.session_id }}"><button class="sm">신청</button></form></td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="muted small">신청할 수 있는 개설 일정이 없습니다.</p>{% endif %}
+{% endif %}
+{% if pl.history %}<h3>신청·이수 이력</h3><table><tbody>
+{% for h in pl.history %}<tr><td>{{ h.start_at.strftime('%Y-%m-%d') }} · {{ h.place }}</td><td><span class="badge {{ h.status }}">{{ enroll_ko[h.status] }}</span></td><td class="small muted">신청 {{ h.applied_at.strftime('%Y-%m-%d') }}{% if h.processed_at %} · 처리 {{ h.processed_at.strftime('%Y-%m-%d') }}{% endif %}</td>
+<td class="right">{% if h.status == 'APPLIED' and h.start_at > now %}<form method="post" action="{{ url_for('training.cancel', enroll_id=h.enroll_id) }}"><button class="sm danger">신청 취소</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table>{% endif %}
+</div>
+{% else %}<div class="card muted">추천받은 교육 계획이 없습니다.</div>{% endfor %}
+{% endblock %}

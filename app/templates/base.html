@@ -15,7 +15,8 @@
       <a href="{{ url_for('projects.index') }}">프로젝트</a>
       <a href="{{ url_for('evaluations.tasks') }}">평가</a>
       <a href="{{ url_for('employees.me') }}">내 정보</a>
-      {% if current_user.emp_type == 'DEV' %}<a href="{{ url_for('employees.my_skills') }}">보유 기술</a>{% endif %}
+      {% if current_user.emp_type == 'DEV' %}<a href="{{ url_for('employees.my_skills') }}">보유 기술</a><a href="{{ url_for('training.my_training') }}">내 교육</a>{% endif %}
+      {% if is_trainer %}<a href="{{ url_for('training.manage') }}">교육 관리</a>{% endif %}
       {% if is_executive %}
         <span class="sep"></span>
         <a href="{{ url_for('employees.search') }}">직원 검색</a>
@@ -23,13 +24,14 @@
         <a href="{{ url_for('reports.evaluations') }}">평가 결과</a>
         <a href="{{ url_for('reports.incentive') }}">인센티브</a>
         <a href="{{ url_for('changes.report') }}">변경요청</a>
+        <a href="{{ url_for('training.report') }}">교육 현황</a>
         <a href="{{ url_for('projects.new') }}">+ 프로젝트 등록</a>
       {% endif %}
     {% endif %}
   </nav>
   <div class="user">
     {% if current_user %}
-      <strong>{{ current_user.emp_name }}</strong> ({{ current_user.emp_no }}{% if is_executive %} · 경영진{% endif %})
+      <strong>{{ current_user.emp_name }}</strong> ({{ current_user.emp_no }}{% if is_executive %} · 경영진{% endif %}{% if is_trainer %} · 교육 담당{% endif %})
       <a href="{{ url_for('auth.logout') }}">로그아웃</a>
     {% else %}
       <a href="{{ url_for('auth.login') }}">로그인</a><a href="{{ url_for('auth.signup') }}">회원가입</a>

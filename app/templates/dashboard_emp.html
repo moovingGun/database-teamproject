@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}내 대시보드{% endblock %}
 {% block content %}
 <h1>{{ current_user.emp_name }} 님의 대시보드</h1>
+{% if training_todo %}<div class="flash info">추천받은 교육 중 아직 신청하지 않은 계획이 <strong>{{ training_todo }}</strong>건 있습니다. <a href="{{ url_for('training.my_training') }}">내 교육 보기 →</a></div>{% endif %}
 {% if todo %}<div class="flash warning">처리할 동료 평가가 <strong>{{ todo }}</strong>건 있습니다. <a href="{{ url_for('evaluations.tasks') }}">평가하러 가기 →</a></div>{% endif %}
 <h2>현재 투입 중인 프로젝트</h2>
 <div class="card">{% if current %}<table><thead><tr><th>프로젝트</th><th>발주처</th><th>직무</th><th>투입 기간</th><th class="right">투입률</th></tr></thead><tbody>

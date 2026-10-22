@@ -190,6 +190,9 @@ titles = {"MARKETING": ["마케팅팀장", "마케팅 매니저", "영업대표"
 for i, (dept, _) in enumerate(staff_plan):
     role = "EXECUTIVE" if (dept == "MANAGEMENT" and i == 10) else "EMPLOYEE"
     title = titles[dept][0] if role == "EXECUTIVE" else random.choice(titles[dept][1:])
+    if dept == "MANAGEMENT" and i == 11:          # [시나리오 B] 교육 담당자 데모 계정
+        employees.append(make_emp(eid, "STAFF", login="edu01", dept=dept, title="인재개발 담당"))
+        employees[-1]["trainer"] = 1; random.choice(titles[dept][1:]); eid += 1; continue
     employees.append(make_emp(eid, "STAFF", role=role, dept=dept, title=title)); eid += 1
 assert len(employees) == 100
 EMP = {e["emp_id"]: e for e in employees}
@@ -450,6 +453,105 @@ for pi, title, content, reason, versions, applied in CR_PLAN:
         rvid += 1
     crid += 1
 
+# --------------------------------------------------------------------- [시나리오 B] 교육과정·일정·역량개선계획·신청
+COURSES = [  # (id, 이름, 분야, 관련 기술, 내용)
+    (1, "업무 의사소통과 요구사항 확인", "COMM", None, "고객 요구사항을 확인·정리하고 팀과 고객에게 전달하는 방법, 회의 진행과 이슈 보고"),
+    (2, "고객 보고서 작성 실무", "COMM", None, "주간보고·이슈보고·완료보고 작성법과 발표 연습"),
+    (3, "Spring Boot 심화", "TECH", "Spring Boot", "트랜잭션, 성능 튜닝, 테스트 코드 작성"),
+    (4, "SQL 튜닝 실무", "TECH", "SQL/PL-SQL", "실행계획 읽기, 인덱스 설계, 대용량 조회 개선"),
+    (5, "React 실전", "TECH", "React", "상태 관리, 컴포넌트 설계, 성능 최적화"),
+    (6, "AWS 클라우드 아키텍처", "TECH", "AWS", "VPC·EC2·RDS 구성과 운영 자동화"),
+    (7, "테스트 자동화와 TDD", "QUALITY", "TDD", "단위·통합 테스트 자동화, 테스트 주도 개발 실습"),
+    (8, "프로젝트 일정·위험 관리", "MGMT", None, "WBS 작성, 일정 관리, 위험 식별과 대응 계획"),
+]
+SESSIONS = [  # (id, 과정, 시작, 종료, 장소, 정원)
+    (1, 1, "2026-07-14 09:00:00", "2026-07-15 18:00:00", "본사 7층 교육장", 20),
+    (2, 1, "2026-09-08 09:00:00", "2026-09-09 18:00:00", "본사 7층 교육장", 20),
+    (3, 1, "2026-11-17 09:00:00", "2026-11-18 18:00:00", "본사 7층 교육장", 20),
+    (4, 2, "2026-08-20 13:00:00", "2026-08-20 18:00:00", "온라인 (화상)", 30),
+    (5, 2, "2026-12-03 13:00:00", "2026-12-03 18:00:00", "온라인 (화상)", 30),
+    (6, 3, "2026-07-20 09:00:00", "2026-07-24 18:00:00", "외부 교육기관 (강남)", 15),
+    (7, 3, "2026-11-23 09:00:00", "2026-11-27 18:00:00", "외부 교육기관 (강남)", 15),
+    (8, 4, "2026-10-13 09:00:00", "2026-10-14 18:00:00", "본사 7층 교육장", 12),
+    (9, 4, "2026-12-08 09:00:00", "2026-12-09 18:00:00", "본사 7층 교육장", 12),
+    (10, 5, "2026-09-21 09:00:00", "2026-09-25 18:00:00", "외부 교육기관 (판교)", 15),
+    (11, 5, "2026-11-30 09:00:00", "2026-12-04 18:00:00", "외부 교육기관 (판교)", 15),
+    (12, 6, "2026-11-09 09:00:00", "2026-11-11 18:00:00", "AWS 교육센터", 20),
+    (13, 7, "2026-08-11 09:00:00", "2026-08-12 18:00:00", "본사 7층 교육장", 15),
+    (14, 7, "2026-12-15 09:00:00", "2026-12-16 18:00:00", "본사 7층 교육장", 15),
+    (15, 8, "2026-09-15 09:00:00", "2026-09-16 18:00:00", "본사 대회의실", 10),
+    (16, 8, "2026-11-24 09:00:00", "2026-11-25 18:00:00", "본사 대회의실", 10),
+]
+TRAINER = next(e["emp_id"] for e in employees if e.get("trainer"))
+ev_meta = {e[0]: (e[1], e[2]) for e in evaluations}            # eval_id -> (project, evaluatee)
+acc = {}
+for ev, item, score, _ in eval_details:
+    acc.setdefault(ev_meta[ev], {1: [], 2: []})[item].append(score)
+cands = []
+for (pid, emp), d in acc.items():
+    if PRJ[pid]["status"] == "COMPLETED" and d[1] and d[2]:
+        work, comm = sum(d[1]) / len(d[1]), sum(d[2]) / len(d[2])
+        cands.append((min(work, comm), work, comm, pid, emp))
+cands.sort()
+skills_of = {}
+for emp, sk, *_ in emp_skills:
+    skills_of.setdefault(emp, set()).add(sk)
+plans, picked = [], set()
+def course_for(emp, work, comm, n):
+    if comm <= work:
+        return 1 if n % 2 == 0 else 2
+    for name, cid in (("Spring Boot", 3), ("SQL/PL-SQL", 4), ("React", 5), ("AWS", 6)):
+        if SKILL_ID[name] in skills_of.get(emp, ()):
+            return cid
+    return 8 if EMP[emp]["grade"] in ("고급", "특급") else 7
+for _, work, comm, pid, emp in cands:
+    if emp in picked or emp in (3, 4) or len(plans) >= 14:
+        continue
+    picked.add(emp)
+    cid = course_for(emp, work, comm, len(plans))
+    created = min(PRJ[pid]["actual_end"] + timedelta(days=21), date(2026, 6, 30))
+    weak = "커뮤니케이션" if comm <= work else "업무수행"
+    goal = {1: "고객 요구사항 확인·전달 역량 향상", 2: "보고서 작성과 보고 역량 향상", 8: "일정·위험 관리 역량 향상"}.get(
+        cid, f"{COURSES[cid - 1][3]} 실무 역량 향상")
+    reason = (f"{PRJ[pid]['name']} 평가에서 {weak} 평균 {min(work, comm):.1f}점. "
+              + ("평가 의견에 요구사항 확인·전달 보완 필요 의견이 있음" if weak == "커뮤니케이션" else "담당 기술 영역의 산출물 재작업 의견이 있음"))
+    plans.append(dict(plan_id=len(plans) + 1, emp=emp, pid=pid, course=cid, goal=goal, reason=reason,
+                      created=created, due=created + timedelta(days=180)))
+if not any(pl["course"] == 4 for pl in plans):     # 수료 기록 대기 데모: 업무수행 보완 대상 1명을 SQL 튜닝 과정으로
+    pl = next(pl for pl in plans if pl["course"] in (3, 5, 6, 7, 8))
+    pl["course"], pl["goal"] = 4, "SQL 튜닝 실무 역량 향상"
+# dev01 데모: 최근 수립된 의사소통 교육 계획, 아직 미신청
+plans.append(dict(plan_id=len(plans) + 1, emp=4, pid=4, course=1, goal="고객 요구사항 확인·전달 역량 향상",
+                  reason=f"{PRJ[4]['name']} 고객 평가에서 요구사항 확인 과정의 보완 필요 의견이 있음. 평가 점수만으로 판단하지 않고 의견 내용을 근거로 추천",
+                  created=date(2026, 10, 5), due=date(2026, 12, 31)))
+sess_by_course = {}
+for sid, cid, st, en, *_ in SESSIONS:
+    sess_by_course.setdefault(cid, []).append((sid, st, en))
+enrollments, enid = [], 1
+def enroll(plan, sid, start, status, attended=None, processed=None, days_before=10):
+    global enid
+    applied = datetime_str(date.fromisoformat(start[:10]) - timedelta(days=days_before))
+    enrollments.append((enid, plan["plan_id"], sid, applied, status, attended, processed)); enid += 1
+def datetime_str(d):
+    return f"{d} 10:00:00"
+pending_done = False
+for i, pl in enumerate(plans[:-1]):
+    ss = sess_by_course[pl["course"]]
+    past = [x for x in ss if x[2] < "2026-10-19" and date.fromisoformat(x[1][:10]) - timedelta(days=10) > pl["created"]]
+    future = [x for x in ss if x[1] > "2026-10-22"]
+    if pl["course"] == 4 and not pending_done and any(x[0] == 8 for x in past):   # 종료됐지만 수료 미기록 → 데모용
+        enroll(pl, 8, "2026-10-13", "APPLIED"); pending_done = True; continue
+    k = i % 7
+    if k in (0, 1) and past:
+        sid, st, en = past[-1]; enroll(pl, sid, st, "COMPLETED", 1, f"{en[:10]} 19:00:00")
+    elif k == 2 and future:
+        sid, st, _ = future[0]; enroll(pl, sid, st, "APPLIED", days_before=7)
+    elif k == 3 and past and future:
+        sid, st, en = past[-1]; enroll(pl, sid, st, "NOT_COMPLETED", 0, f"{en[:10]} 19:00:00")
+        sid, st, _ = future[0]; enroll(pl, sid, st, "APPLIED", days_before=6)
+    elif k == 4 and future:
+        sid, st, _ = future[0]; enroll(pl, sid, st, "CANCELLED", None, "2026-10-15 11:00:00", days_before=40)
+
 # --------------------------------------------------------------------- 등급 변경 이력 (과거 승급 기록)
 grade_hist = []
 order = ["초급", "중급", "고급", "특급"]
@@ -484,8 +586,8 @@ parts = [
          [(e["emp_id"], e["name"], e["rrn"], e["edu"], e["hire"], e["type"], e["email"], e["phone"]) for e in employees]),
     rows("developer", ["emp_id", "skill_grade", "career_start_date"],
          [(e["emp_id"], e["grade"], e["career_start"]) for e in DEVS]),
-    rows("staff", ["emp_id", "department", "job_title"],
-         [(e["emp_id"], e["dept"], e["title"]) for e in employees if e["type"] == "STAFF"]),
+    rows("staff", ["emp_id", "department", "job_title", "is_training_manager"],
+         [(e["emp_id"], e["dept"], e["title"], e.get("trainer", 0)) for e in employees if e["type"] == "STAFF"]),
     rows("user_account", ["emp_id", "login_id", "password_hash", "auth_role"],
          [(e["emp_id"], e["login"], pw_hash, e["role"]) for e in employees]),
     rows("employee_skill", ["emp_id", "skill_id", "proficiency", "years_used", "last_used_date"], emp_skills),
@@ -514,6 +616,15 @@ parts = [
     rows("change_history", ["review_id", "before_end_date", "after_end_date", "before_amount", "after_amount", "applied_by_emp_id", "applied_at"],
          change_histories),
     "",
+    "-- [시나리오 B] 교육과정·일정·역량개선계획·신청 (BR-24~29 검증 통과) ----------------",
+    rows("training_course", ["course_id", "course_name", "field", "skill_id", "description"],
+         [(c[0], c[1], c[2], SKILL_ID[c[3]] if c[3] else None, c[4]) for c in COURSES]),
+    rows("training_session", ["session_id", "course_id", "start_at", "end_at", "place", "capacity"], SESSIONS),
+    rows("development_plan", ["plan_id", "emp_id", "project_id", "course_id", "manager_emp_id", "improvement_goal", "reason",
+                              "created_date", "due_date"],
+         [(pl["plan_id"], pl["emp"], pl["pid"], pl["course"], TRAINER, pl["goal"], pl["reason"], pl["created"], pl["due"]) for pl in plans]),
+    rows("training_enrollment", ["enroll_id", "plan_id", "session_id", "applied_at", "status", "attended", "processed_at"], enrollments),
+    "",
     "-- 기술등급 변경 이력 -------------------------------------------------------",
     rows("grade_history", ["emp_id", "old_grade", "new_grade", "changed_at", "changed_by_emp_id", "reason"], grade_hist),
     "",
@@ -532,4 +643,7 @@ for p in projects:
 print("projects by status:", by_status)
 print("reserved (available now) devs:", sorted(RESERVED))
 print(f"change requests={len(change_requests)} reviews={len(change_reviews)} applied={len(change_histories)}")
+from collections import Counter
+print(f"training: plans={len(plans)} enrollments={len(enrollments)} by status={dict(Counter(e[4] for e in enrollments))} "
+      f"courses={dict(Counter(pl['course'] for pl in plans))} trainer={TRAINER} pending_completion={pending_done}")
 print("assignments per project:", {p["project_id"]: len([a for a in assignments if a["project_id"] == p["project_id"]]) for p in projects})

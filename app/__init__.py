@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from flask import Flask, session
@@ -35,20 +35,23 @@ def create_app():
     )
     app.teardown_appcontext(db.close_db)
 
-    from . import auth, changes, employees, projects, evaluations, reports
+    from . import auth, changes, employees, projects, evaluations, reports, training
     app.register_blueprint(auth.bp)
     app.register_blueprint(employees.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(evaluations.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(changes.bp)
+    app.register_blueprint(training.bp)
 
     @app.context_processor
     def inject_globals():
         return dict(
             current_user=session.get("user"),
             is_executive=(session.get("user") or {}).get("auth_role") == "EXECUTIVE",
+            is_trainer=bool((session.get("user") or {}).get("is_trainer")),
             today=date.today(),
+            now=datetime.now(),
         )
 
     @app.template_filter("won")

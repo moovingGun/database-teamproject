@@ -93,4 +93,27 @@ echo "-- 승인 후 재검토(2차) → 1차 반영 시도 [기대: 상태 REVIE
 post pm01 /changes/$CR2/reviews --data-urlencode proposed_end_date=$NEWEND --data-urlencode additional_amount=0 --data-urlencode review_comment=재검토
 q "SELECT status FROM change_request WHERE cr_id=$CR2"
 post pm01 /changes/$CR2/apply -d "review_id=$RV2"
+echo "== 11. [시나리오 B] 교육: 계획 수립 → 신청 → 중복 신청 → 취소 → 재신청 → 수료 기록"
+login edu01
+CAND=$(curl -s -b "$T/edu01" "$B/training" | grep -o 'emp_id=[0-9]*&amp;project_id=[0-9]*' | head -1 | sed 's/&amp;/\&/g')
+post edu01 "/training/plans/new?$CAND" --data-urlencode course_id=1 --data-urlencode due_date=2027-03-31 --data-urlencode improvement_goal=e2e의사소통 --data-urlencode reason=e2e평가의견
+echo "-- 교육 담당자가 아닌 개발자가 계획 수립 [기대: 403]"; curl -s -b "$T/dev01" -o /dev/null -w "%{http_code}\n" "$B/training/plans/new?$CAND"
+PL=$(q "SELECT plan_id FROM development_plan WHERE emp_id=4 ORDER BY plan_id DESC LIMIT 1")
+S1=$(q "SELECT session_id FROM training_session WHERE course_id=1 AND start_at > NOW() ORDER BY start_at LIMIT 1")
+post dev01 /me/training/apply -d "plan_id=$PL&session_id=$S1"
+echo "-- 같은 일정 중복 신청 [기대: BR-27 거부]"; post dev01 /me/training/apply -d "plan_id=$PL&session_id=$S1"
+SX=$(q "SELECT session_id FROM training_session WHERE course_id<>1 AND start_at > NOW() LIMIT 1")
+echo "-- 추천 과정이 아닌 일정 신청 [기대: BR-26 거부]"; post dev01 /me/training/apply -d "plan_id=$PL&session_id=$SX"
+OTHERPL=$(q "SELECT plan_id FROM development_plan WHERE emp_id<>4 LIMIT 1")
+echo "-- 남의 계획으로 신청 [기대: 403]"; curl -s -b "$T/dev01" -o /dev/null -w "%{http_code}\n" -d "plan_id=$OTHERPL&session_id=$S1" "$B/me/training/apply"
+EN=$(q "SELECT MAX(enroll_id) FROM training_enrollment WHERE plan_id=$PL")
+post dev01 /me/training/$EN/cancel --data ""
+post dev01 /me/training/apply -d "plan_id=$PL&session_id=$S1"
+q "SELECT te.status, COUNT(*) FROM training_enrollment te WHERE plan_id=$PL GROUP BY te.status"
+echo "-- 시작 전 교육에 수료 기록 [기대: BR-29 거부]"; EN2=$(q "SELECT MAX(enroll_id) FROM training_enrollment WHERE plan_id=$PL")
+post edu01 /training/enrollments/$EN2/result -d "result=COMPLETED"
+PEND=$(q "SELECT te.enroll_id FROM training_enrollment te JOIN training_session ts USING(session_id) WHERE te.status='APPLIED' AND ts.end_at <= NOW() LIMIT 1")
+echo "-- 끝난 교육 수료 기록 [기대: 성공, 기술등급 그대로]"; G0=$(q "SELECT skill_grade FROM developer WHERE emp_id=(SELECT dp.emp_id FROM training_enrollment te JOIN development_plan dp USING(plan_id) WHERE enroll_id=$PEND)")
+post edu01 /training/enrollments/$PEND/result -d "result=COMPLETED"
+q "SELECT te.status, d.skill_grade, '$G0' AS before_grade FROM training_enrollment te JOIN development_plan dp USING(plan_id) JOIN developer d ON d.emp_id=dp.emp_id WHERE enroll_id=$PEND"
 echo "== 끝. ./db/reset.sh 로 데이터를 되돌리세요."
