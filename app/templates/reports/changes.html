@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}변경요청 현황{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>변경요청 처리 현황 <span class="muted small">— 조별 특화 시나리오 A · 데모 시나리오 S7</span></h1>
+<form method="get" class="inline"><select name="status" onchange="this.form.submit()"><option value="">전체 상태</option>{% for k,v in cr_status_ko.items() %}<option value="{{ k }}" {{ 'selected' if status==k }}>{{ v }} ({{ counts.get(k, 0) }})</option>{% endfor %}</select></form></div>
+<div class="card"><p class="muted small">최신 차수 검토안 기준. 아직 검토·동의·반영되지 않은 요청도 함께 보입니다. 반영된 요청은 변경 전후 값을 보여 줍니다.</p>
+<div style="overflow-x:auto"><table><thead><tr><th>요청번호</th><th>프로젝트</th><th>요청</th><th>상태</th><th>검토안</th><th>내부 결정</th><th>고객 동의</th><th>계획 반영 (전 → 후)</th></tr></thead><tbody>
+{% for r in rows %}<tr>
+  <td><a href="{{ url_for('changes.detail', cr_id=r.cr_id) }}">{{ r.cr_no }}</a><br><span class="muted small">{{ r.request_date }}</span></td>
+  <td class="small"><a href="{{ url_for('projects.detail', project_id=r.project_id) }}">{{ r.project_code }}</a> {{ r.project_name }}<br><span class="muted">{{ r.client_name }} · {{ r.requested_by }}</span></td>
+  <td class="small">{{ r.title }}</td>
+  <td><span class="badge {{ r.status }}">{{ cr_status_ko[r.status] }}</span></td>
+  <td class="small">{% if r.review_id %}{{ r.version_no }}차 · ~{{ r.proposed_end_date }}<br>+{{ r.additional_amount|won }}{% else %}<span class="muted">없음</span>{% endif %}</td>
+  <td class="small">{% if r.decision %}<span class="badge {{ r.decision }}">{{ decision_ko[r.decision] }}</span><br>{{ r.decided_by or '' }} {{ r.decided_at or '' }}{% else %}-{% endif %}</td>
+  <td class="small">{% if r.consent %}<span class="badge {{ r.consent }}">{{ consent_ko[r.consent] }}</span><br>{{ r.consent_by or '' }} {{ r.consent_date or '' }}{% else %}-{% endif %}</td>
+  <td class="small">{% if r.applied_at %}<div class="cmp"><del>{{ r.before_end_date }}</del>→<b>{{ r.after_end_date }}</b></div><div class="cmp"><del>{{ r.before_amount|won }}</del>→<b>{{ r.after_amount|won }}</b></div>{% else %}<span class="muted">미반영</span>{% endif %}</td>
+</tr>{% else %}<tr><td colspan="8" class="muted">변경요청이 없습니다.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

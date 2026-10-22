@@ -19,6 +19,16 @@ SET NAMES utf8mb4;
 --   BR-13 PM 평가의 평가자는 프로젝트 PM, 자기 자신은 평가 불가, 피평가자당 1건
 --   BR-14 동료 평가의 평가자는 참여자, 자기 자신은 평가 불가, (평가자,피평가자)당 1건
 --   BR-15 기술등급 변경 시 이력 자동 기록
+--   ── 조별 특화 시나리오 A: 고객사 변경요청 및 승인 관리 ──
+--   BR-16 변경요청은 예정·진행 중 프로젝트에만, 요청번호 자동 채번
+--   BR-17 요청한 담당자는 해당 프로젝트 발주처 소속
+--   BR-18 변경요청 접수와 검토안 작성은 해당 프로젝트 PM 만
+--   BR-19 결정·동의·반영은 최신 차수 검토안에만 (승인 후 내용 변경은 새 차수로 재검토)
+--   BR-20 결정이 난 검토안의 제안 내용(종료예정일·금액·의견)은 수정 불가
+--   BR-21 내부 승인·반려는 경영진만
+--   BR-22 고객 동의는 내부 승인 후에만, 동의 담당자는 해당 발주처 소속
+--   BR-23 내부 승인 + 고객 동의가 모두 끝난 검토안만 반영, 같은 검토안 중복 반영 금지,
+--         반영 시 변경 전후 값 이력 보존, 새 종료예정일보다 늦게 끝나는 투입이 있으면 거부
 -- =====================================================================
 USE si_pms;
 
@@ -34,6 +44,17 @@ DROP TRIGGER   IF EXISTS trg_pm_eval_bi;
 DROP TRIGGER   IF EXISTS trg_peer_eval_bi;
 DROP TRIGGER   IF EXISTS trg_developer_bu;
 DROP TRIGGER   IF EXISTS trg_developer_au;
+DROP PROCEDURE IF EXISTS sp_validate_change_review;
+DROP PROCEDURE IF EXISTS sp_sync_change_status;
+DROP PROCEDURE IF EXISTS sp_apply_change;
+DROP TRIGGER   IF EXISTS trg_change_request_bi;
+DROP TRIGGER   IF EXISTS trg_change_review_bi;
+DROP TRIGGER   IF EXISTS trg_change_review_bu;
+DROP TRIGGER   IF EXISTS trg_change_review_ai;
+DROP TRIGGER   IF EXISTS trg_change_review_au;
+DROP TRIGGER   IF EXISTS trg_change_history_bi;
+DROP TRIGGER   IF EXISTS trg_change_history_ai;
+DROP VIEW      IF EXISTS v_change_request;
 DROP VIEW      IF EXISTS v_project_eval_summary;
 DROP VIEW      IF EXISTS v_eval_score;
 DROP VIEW      IF EXISTS v_assignment_detail;
@@ -275,6 +296,204 @@ BEGIN
   END IF;
 END$$
 
+-- =====================================================================
+-- [조별 특화 시나리오 A] 고객사 변경요청 및 승인 관리 (BR-16 ~ BR-23)
+-- =====================================================================
+CREATE TRIGGER trg_change_request_bi BEFORE INSERT ON change_request FOR EACH ROW
+BEGIN
+  DECLARE v_status VARCHAR(20);
+  DECLARE v_client INT;
+  DECLARE v_cnt INT DEFAULT 0;
+  DECLARE v_seq INT;
+  SELECT status, client_id INTO v_status, v_client FROM project WHERE project_id = NEW.project_id;
+  IF v_status NOT IN ('PLANNED', 'IN_PROGRESS') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-16] 변경요청은 예정 또는 진행 중인 프로젝트에만 접수할 수 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM client_contact WHERE contact_id = NEW.contact_id AND client_id = v_client;
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-17] 요청한 담당자는 해당 프로젝트 발주처 소속이어야 합니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM assignment a JOIN job_role r ON r.role_id = a.role_id
+   WHERE a.project_id = NEW.project_id AND a.emp_id = NEW.received_by_emp_id AND r.role_code = 'PM';
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-18] 변경요청은 해당 프로젝트 PM 만 접수할 수 있습니다.';
+  END IF;
+  IF NEW.cr_no IS NULL OR NEW.cr_no = '' THEN
+    CALL sp_next_seq('CR_NO', YEAR(NEW.request_date), v_seq);
+    SET NEW.cr_no = CONCAT('CR', YEAR(NEW.request_date), '-', LPAD(v_seq, 3, '0'));
+  END IF;
+  SET NEW.status = 'RECEIVED';
+END$$
+
+-- 검토안 INSERT/UPDATE 공통 검증 (p_old_* 는 INSERT 시 NULL)
+CREATE PROCEDURE sp_validate_change_review(
+  IN p_is_insert TINYINT, IN p_cr_id INT, IN p_version TINYINT, IN p_reviewer INT,
+  IN p_decision VARCHAR(10), IN p_old_decision VARCHAR(10), IN p_decided_by INT,
+  IN p_consent VARCHAR(10), IN p_old_consent VARCHAR(10), IN p_consent_contact INT)
+BEGIN
+  DECLARE v_project INT;
+  DECLARE v_client INT;
+  DECLARE v_cr_status VARCHAR(10);
+  DECLARE v_max TINYINT;
+  DECLARE v_cnt INT DEFAULT 0;
+  SELECT cr.project_id, cr.status, p.client_id INTO v_project, v_cr_status, v_client
+    FROM change_request cr JOIN project p ON p.project_id = cr.project_id WHERE cr.cr_id = p_cr_id;
+  IF v_cr_status = 'APPLIED' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-23] 이미 프로젝트에 반영된 변경요청입니다.';
+  END IF;
+  SELECT IFNULL(MAX(version_no), 0) INTO v_max FROM change_review WHERE cr_id = p_cr_id;
+  IF p_is_insert = 1 THEN
+    IF p_version <> v_max + 1 THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-19] 검토 차수는 기존 최신 차수 + 1 이어야 합니다.';
+    END IF;
+    SELECT COUNT(*) INTO v_cnt FROM assignment a JOIN job_role r ON r.role_id = a.role_id
+     WHERE a.project_id = v_project AND a.emp_id = p_reviewer AND r.role_code = 'PM';
+    IF v_cnt = 0 THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-18] 검토안(영향 분석)은 해당 프로젝트 PM 만 작성할 수 있습니다.';
+    END IF;
+  ELSEIF p_version <> v_max AND (p_decision <> p_old_decision OR p_consent <> p_old_consent) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-19] 최신 차수의 검토안만 결정하거나 고객 동의를 기록할 수 있습니다.';
+  END IF;
+  -- BR-21 : 결정은 경영진만, PENDING 에서 한 번만
+  IF p_decision <> 'PENDING' AND (p_is_insert = 1 OR p_decision <> p_old_decision) THEN
+    IF p_old_decision IS NOT NULL AND p_old_decision <> 'PENDING' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-21] 이미 결정된 검토안입니다. 내용이 바뀌면 새 차수로 재검토하세요.';
+    END IF;
+    SELECT COUNT(*) INTO v_cnt FROM user_account WHERE emp_id = p_decided_by AND auth_role = 'EXECUTIVE';
+    IF v_cnt = 0 THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-21] 변경 검토안의 승인·반려는 경영진만 할 수 있습니다.';
+    END IF;
+  END IF;
+  -- BR-22 : 고객 동의는 내부 승인 후에만, 해당 발주처 담당자만
+  IF p_consent <> 'PENDING' AND (p_is_insert = 1 OR p_consent <> p_old_consent) THEN
+    IF p_decision <> 'APPROVED' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-22] 고객 동의는 내부 승인된 검토안에만 기록할 수 있습니다.';
+    END IF;
+    IF p_old_consent IS NOT NULL AND p_old_consent <> 'PENDING' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-22] 고객 동의 결과가 이미 기록되어 있습니다.';
+    END IF;
+    SELECT COUNT(*) INTO v_cnt FROM client_contact WHERE contact_id = p_consent_contact AND client_id = v_client;
+    IF v_cnt = 0 THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-22] 동의한 담당자는 해당 프로젝트 발주처 소속이어야 합니다.';
+    END IF;
+  END IF;
+END$$
+
+CREATE TRIGGER trg_change_review_bi BEFORE INSERT ON change_review FOR EACH ROW
+  CALL sp_validate_change_review(1, NEW.cr_id, NEW.version_no, NEW.reviewer_emp_id,
+       NEW.decision, NULL, NEW.decided_by_emp_id, NEW.consent, NULL, NEW.consent_contact_id)$$
+
+CREATE TRIGGER trg_change_review_bu BEFORE UPDATE ON change_review FOR EACH ROW
+BEGIN
+  -- BR-20 : 결정이 난 검토안의 제안 내용은 고칠 수 없음
+  IF OLD.decision <> 'PENDING' AND (NEW.proposed_end_date <> OLD.proposed_end_date
+       OR NEW.additional_amount <> OLD.additional_amount
+       OR NOT (NEW.review_comment <=> OLD.review_comment)) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-20] 결정이 난 검토안은 수정할 수 없습니다. 새 차수로 재검토하세요.';
+  END IF;
+  CALL sp_validate_change_review(0, NEW.cr_id, NEW.version_no, NEW.reviewer_emp_id,
+       NEW.decision, OLD.decision, NEW.decided_by_emp_id, NEW.consent, OLD.consent, NEW.consent_contact_id);
+END$$
+
+-- 변경요청 상태 = 최신 차수 검토안의 결정·동의 상태
+CREATE PROCEDURE sp_sync_change_status(IN p_cr_id INT)
+BEGIN
+  UPDATE change_request cr
+    JOIN change_review rv ON rv.cr_id = cr.cr_id
+     AND rv.version_no = (SELECT MAX(version_no) FROM change_review WHERE cr_id = p_cr_id)
+     SET cr.status = CASE
+           WHEN rv.decision = 'PENDING'  THEN 'REVIEWING'
+           WHEN rv.decision = 'REJECTED' THEN 'REJECTED'
+           WHEN rv.consent  = 'AGREED'   THEN 'AGREED'
+           WHEN rv.consent  = 'DECLINED' THEN 'DECLINED'
+           ELSE 'APPROVED' END
+   WHERE cr.cr_id = p_cr_id AND cr.status <> 'APPLIED';
+END$$
+
+CREATE TRIGGER trg_change_review_ai AFTER INSERT ON change_review FOR EACH ROW
+  CALL sp_sync_change_status(NEW.cr_id)$$
+
+CREATE TRIGGER trg_change_review_au AFTER UPDATE ON change_review FOR EACH ROW
+  CALL sp_sync_change_status(NEW.cr_id)$$
+
+-- BR-23 : 적용이력은 승인 + 동의된 최신 검토안만
+CREATE TRIGGER trg_change_history_bi BEFORE INSERT ON change_history FOR EACH ROW
+BEGIN
+  DECLARE v_cr INT;
+  DECLARE v_ver TINYINT;
+  DECLARE v_dec VARCHAR(10);
+  DECLARE v_con VARCHAR(10);
+  SELECT cr_id, version_no, decision, consent INTO v_cr, v_ver, v_dec, v_con
+    FROM change_review WHERE review_id = NEW.review_id;
+  IF v_dec <> 'APPROVED' OR v_con <> 'AGREED' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-23] 내부 승인과 고객 동의가 모두 끝난 검토안만 반영할 수 있습니다.';
+  END IF;
+  IF v_ver <> (SELECT MAX(version_no) FROM change_review WHERE cr_id = v_cr) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-19] 최신 차수의 검토안만 반영할 수 있습니다.';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_change_history_ai AFTER INSERT ON change_history FOR EACH ROW
+  UPDATE change_request SET status = 'APPLIED'
+   WHERE cr_id = (SELECT cr_id FROM change_review WHERE review_id = NEW.review_id)$$
+
+-- 반영: 검증 → 이력 기록 → 프로젝트 종료예정일·계약금액 변경 (한 트랜잭션은 호출자가 관리)
+CREATE PROCEDURE sp_apply_change(IN p_review_id INT, IN p_emp_id INT)
+BEGIN
+  DECLARE v_project INT;
+  DECLARE v_start DATE;
+  DECLARE v_end DATE;
+  DECLARE v_amount DECIMAL(15,0);
+  DECLARE v_new_end DATE;
+  DECLARE v_add DECIMAL(15,0);
+  DECLARE v_status VARCHAR(20);
+  DECLARE v_late DATE;
+  DECLARE v_cnt INT DEFAULT 0;
+  DECLARE v_msg VARCHAR(160);
+  SELECT p.project_id, p.start_date, p.end_date, p.contract_amount, p.status, rv.proposed_end_date, rv.additional_amount
+    INTO v_project, v_start, v_end, v_amount, v_status, v_new_end, v_add
+    FROM change_review rv JOIN change_request cr ON cr.cr_id = rv.cr_id
+    JOIN project p ON p.project_id = cr.project_id
+   WHERE rv.review_id = p_review_id FOR UPDATE;
+  -- 검토안 상태를 먼저 확인 (이미 반영 → 최신 차수 → 승인·동의 순)
+  SELECT COUNT(*) INTO v_cnt FROM change_history WHERE review_id = p_review_id;
+  IF v_cnt > 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-23] 이미 반영된 검토안입니다. 같은 요청을 두 번 반영할 수 없습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM change_review rv
+   WHERE rv.review_id = p_review_id
+     AND rv.version_no = (SELECT MAX(x.version_no) FROM change_review x WHERE x.cr_id = rv.cr_id);
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-19] 최신 차수의 검토안만 반영할 수 있습니다. 재검토된 요청은 새 차수로 진행하세요.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM change_review WHERE review_id = p_review_id AND decision = 'APPROVED' AND consent = 'AGREED';
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-23] 내부 승인과 고객 동의가 모두 끝난 검토안만 반영할 수 있습니다.';
+  END IF;
+  IF v_status NOT IN ('PLANNED', 'IN_PROGRESS') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-16] 예정 또는 진행 중인 프로젝트에만 변경을 반영할 수 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM user_account ua WHERE ua.emp_id = p_emp_id AND ua.auth_role = 'EXECUTIVE';
+  IF v_cnt = 0 THEN
+    SELECT COUNT(*) INTO v_cnt FROM assignment a JOIN job_role r ON r.role_id = a.role_id
+     WHERE a.project_id = v_project AND a.emp_id = p_emp_id AND r.role_code = 'PM';
+  END IF;
+  IF v_cnt = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-23] 변경 반영은 해당 프로젝트 PM 또는 경영진만 할 수 있습니다.';
+  END IF;
+  IF v_new_end < v_start THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-23] 새 종료예정일이 착수일보다 빠릅니다.';
+  END IF;
+  SELECT MAX(end_date) INTO v_late FROM assignment WHERE project_id = v_project;
+  IF v_late IS NOT NULL AND v_late > v_new_end THEN
+    SET v_msg = CONCAT('[BR-23] ', v_late, ' 까지 투입된 인력이 있어 종료예정일을 ', v_new_end, ' 로 앞당길 수 없습니다. 투입을 먼저 조정하세요.');
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+  END IF;
+  INSERT INTO change_history (review_id, before_end_date, after_end_date, before_amount, after_amount, applied_by_emp_id)
+  VALUES (p_review_id, v_end, v_new_end, v_amount, IFNULL(v_amount, 0) + v_add, p_emp_id);
+  UPDATE project SET end_date = v_new_end, contract_amount = IFNULL(v_amount, 0) + v_add WHERE project_id = v_project;
+END$$
+
 DELIMITER ;
 
 -- ---------------------------------------------------------------------
@@ -340,3 +559,24 @@ SELECT t.project_id, t.evaluatee_emp_id,
          GROUP BY project_id, evaluatee_emp_id, eval_type) t
   JOIN eval_type_weight w ON w.eval_type = t.eval_type
  GROUP BY t.project_id, t.evaluatee_emp_id;
+
+-- [시나리오 A 데모 S7] 변경요청 ⋈ 프로젝트 ⋈ 발주처 ⋈ 담당자 ⋈ PM ⋈ 최신 검토안 ⋈ 결정자 ⋈ 동의 담당자 ⋈ 적용이력
+CREATE VIEW v_change_request AS
+SELECT cr.cr_id, cr.cr_no, cr.status, cr.request_date, cr.title, cr.content, cr.reason,
+       p.project_id, p.project_code, p.project_name, p.status AS project_status,
+       c.client_name, cc.contact_name AS requested_by, pm.emp_name AS received_pm,
+       rv.review_id, rv.version_no, rv.proposed_end_date, rv.additional_amount, rv.review_comment,
+       rv.decision, ex.emp_name AS decided_by, rv.decided_at, rv.decision_reason,
+       rv.consent, ccs.contact_name AS consent_by, rv.consent_date, rv.consent_evidence,
+       h.before_end_date, h.after_end_date, h.before_amount, h.after_amount, h.applied_at, ap.emp_name AS applied_by
+  FROM change_request cr
+  JOIN project  p  ON p.project_id  = cr.project_id
+  JOIN client   c  ON c.client_id   = p.client_id
+  JOIN client_contact cc ON cc.contact_id = cr.contact_id
+  JOIN employee pm ON pm.emp_id     = cr.received_by_emp_id
+  LEFT JOIN change_review rv ON rv.cr_id = cr.cr_id
+        AND rv.version_no = (SELECT MAX(x.version_no) FROM change_review x WHERE x.cr_id = cr.cr_id)
+  LEFT JOIN employee ex ON ex.emp_id = rv.decided_by_emp_id
+  LEFT JOIN client_contact ccs ON ccs.contact_id = rv.consent_contact_id
+  LEFT JOIN change_history h ON h.review_id = rv.review_id
+  LEFT JOIN employee ap ON ap.emp_id = h.applied_by_emp_id;

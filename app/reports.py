@@ -36,7 +36,8 @@ def index():
                    (SELECT COUNT(*) FROM developer d JOIN employee e ON e.emp_id = d.emp_id
                      WHERE e.status = 'ACTIVE' AND IFNULL((SELECT SUM(participation_rate) FROM assignment a
                         WHERE a.emp_id = d.emp_id AND CURDATE() BETWEEN a.start_date AND a.end_date), 0) < 100) AS available,
-                   (SELECT COUNT(*) FROM evaluation WHERE eval_type = 'CUSTOMER' AND status = 'REQUESTED') AS cust_pending""", one=True)
+                   (SELECT COUNT(*) FROM evaluation WHERE eval_type = 'CUSTOMER' AND status = 'REQUESTED') AS cust_pending,
+                   (SELECT COUNT(*) FROM change_request WHERE status = 'REVIEWING') AS cr_pending""", one=True)
         # [데모 시나리오 1] 진행 중 프로젝트별 현재 투입 현황 (프로젝트 ⋈ 발주처 ⋈ 투입 ⋈ 직원 ⋈ 직무)
         staffing = db.query("""
             SELECT p.project_id, p.project_code, p.project_name, c.client_name, p.start_date, p.end_date,
@@ -126,7 +127,7 @@ def evaluations():
 @executive_required
 def incentive():
     year = request.args.get("year", type=int) or date.today().year
-    years = db.query("SELECT DISTINCT YEAR(end_date) AS y FROM project WHERE status = 'COMPLETED' ORDER BY y DESC")
+    years = db.query("SELECT DISTINCT YEAR(COALESCE(actual_end_date, end_date)) AS y FROM project WHERE status = 'COMPLETED' ORDER BY y DESC")
     # [데모 시나리오 5] 연도별 인센티브 산정 기초자료 (종료 프로젝트 평가 종합 → 개인별 평균·등급·지급 권고액)
     rows = db.query("""
         SELECT e.emp_id, e.emp_no, e.emp_name, d.skill_grade,
@@ -135,7 +136,8 @@ def incentive():
                SUM(s.incentive_grade = 'S') AS s_cnt, SUM(s.incentive_grade = 'A') AS a_cnt,
                SUM(s.incentive_grade = 'B') AS b_cnt, SUM(s.incentive_grade = 'C') AS c_cnt,
                (SELECT COUNT(*) FROM pm_eval pm JOIN evaluation ev ON ev.eval_id = pm.eval_id JOIN project p2 ON p2.project_id = ev.project_id
-                 WHERE ev.evaluatee_emp_id = e.emp_id AND pm.recommend_incentive = 1 AND YEAR(p2.end_date) = %s) AS pm_recommend_cnt,
+                 WHERE ev.evaluatee_emp_id = e.emp_id AND pm.recommend_incentive = 1
+                   AND YEAR(COALESCE(p2.actual_end_date, p2.end_date)) = %s) AS pm_recommend_cnt,
                CASE WHEN AVG(s.weighted_score) >= 4.5 THEN 'S' WHEN AVG(s.weighted_score) >= 4.0 THEN 'A'
                     WHEN AVG(s.weighted_score) >= 3.0 THEN 'B' ELSE 'C' END AS final_grade,
                CASE WHEN AVG(s.weighted_score) >= 4.5 THEN 1.5 WHEN AVG(s.weighted_score) >= 4.0 THEN 1.0
@@ -144,7 +146,7 @@ def incentive():
           JOIN project   p ON p.project_id = s.project_id
           JOIN employee  e ON e.emp_id = s.evaluatee_emp_id
           JOIN developer d ON d.emp_id = s.evaluatee_emp_id
-         WHERE p.status = 'COMPLETED' AND YEAR(p.end_date) = %s
+         WHERE p.status = 'COMPLETED' AND YEAR(COALESCE(p.actual_end_date, p.end_date)) = %s
          GROUP BY e.emp_id, e.emp_no, e.emp_name, d.skill_grade
          ORDER BY avg_score DESC, project_cnt DESC""", (year, year))
     return render_template("reports/incentive.html", rows=rows, year=year, years=[y["y"] for y in years])

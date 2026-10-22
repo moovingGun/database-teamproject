@@ -5,6 +5,7 @@ services:
   db:
     image: mysql:8.0
     container_name: si_pms_db
+    restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci

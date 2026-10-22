@@ -52,6 +52,7 @@ def detail(project_id):
                                    JOIN client_contact cc ON cc.contact_id = ce.contact_id
                                   WHERE ev.project_id = %s ORDER BY ev.eval_id""", (project_id,))
     is_pm = any(a["emp_id"] == me and a["role_code"] == "PM" for a in assignments)
+    changes = db.query("""SELECT * FROM v_change_request WHERE project_id = %s ORDER BY cr_id DESC""", (project_id,))
     is_member = any(a["emp_id"] == me for a in assignments)
     developers = roles = []
     if session["user"]["auth_role"] == "EXECUTIVE":
@@ -60,7 +61,8 @@ def detail(project_id):
         roles = db.query("SELECT * FROM job_role ORDER BY sort_order")
     return render_template("projects/detail.html", p=p, assignments=assignments, req_skills=req_skills,
                            contacts=contacts, eval_progress=eval_progress, customer_evals=customer_evals,
-                           is_pm=is_pm, is_member=is_member, developers=developers, roles=roles, status_ko=STATUS_KO)
+                           is_pm=is_pm, is_member=is_member, developers=developers, roles=roles, status_ko=STATUS_KO,
+                           changes=changes)
 
 
 @bp.route("/new", methods=["GET", "POST"])
@@ -136,7 +138,8 @@ def change_status(project_id):
             db.execute("UPDATE project SET status='IN_PROGRESS' WHERE project_id=%s AND status='PLANNED'", (project_id,))
         elif action == "complete":
             actual = request.form.get("actual_end_date") or date.today().isoformat()
-            db.execute("UPDATE project SET status='COMPLETED', end_date=%s WHERE project_id=%s AND status='IN_PROGRESS'",
+            # 종료예정일(end_date)은 계획으로 남기고 실제 종료일을 따로 기록
+            db.execute("UPDATE project SET status='COMPLETED', actual_end_date=%s WHERE project_id=%s AND status='IN_PROGRESS'",
                        (actual, project_id))
             db.execute("DELETE FROM assignment WHERE project_id=%s AND start_date > %s", (project_id, actual))
             db.execute("UPDATE assignment SET end_date=%s WHERE project_id=%s AND end_date > %s", (actual, project_id, actual))

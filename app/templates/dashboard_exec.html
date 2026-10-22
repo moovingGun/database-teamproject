@@ -7,6 +7,7 @@
   <div class="card"><div class="num">{{ kpi.assigned }}<span class="muted" style="font-size:14px"> / {{ kpi.devs }}</span></div><div class="lbl">현재 투입 개발자</div></div>
   <div class="card"><div class="num">{{ kpi.available }}</div><div class="lbl">가용 개발자 (투입률 &lt; 100%)</div></div>
   <div class="card"><div class="num">{{ kpi.cust_pending }}</div><div class="lbl">고객평가 미회신</div></div>
+  <div class="card"><a href="{{ url_for('changes.report', status='REVIEWING') }}" style="text-decoration:none"><div class="num">{{ kpi.cr_pending }}</div><div class="lbl">변경요청 결정 대기</div></a></div>
 </div>
 <h2>진행 중 프로젝트별 투입 현황 <span class="muted small">— 데모 시나리오 1</span></h2>
 <div class="card"><table>

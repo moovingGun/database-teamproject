@@ -116,7 +116,7 @@ SELECT e.emp_no, e.emp_name, d.skill_grade,
        ROUND(AVG(s.weighted_score), 2) AS avg_score,
        SUM(s.incentive_grade = 'S') AS s_cnt, SUM(s.incentive_grade = 'A') AS a_cnt,
        (SELECT COUNT(*) FROM pm_eval pm JOIN evaluation ev ON ev.eval_id = pm.eval_id JOIN project p2 ON p2.project_id = ev.project_id
-         WHERE ev.evaluatee_emp_id = e.emp_id AND pm.recommend_incentive = 1 AND YEAR(p2.end_date) = 2025) AS pm_recommend_cnt,
+         WHERE ev.evaluatee_emp_id = e.emp_id AND pm.recommend_incentive = 1 AND YEAR(COALESCE(p2.actual_end_date, p2.end_date)) = 2025) AS pm_recommend_cnt,
        CASE WHEN AVG(s.weighted_score) >= 4.5 THEN 'S' WHEN AVG(s.weighted_score) >= 4.0 THEN 'A'
             WHEN AVG(s.weighted_score) >= 3.0 THEN 'B' ELSE 'C' END AS final_grade,
        CASE WHEN AVG(s.weighted_score) >= 4.5 THEN 1.5 WHEN AVG(s.weighted_score) >= 4.0 THEN 1.0
@@ -125,7 +125,7 @@ SELECT e.emp_no, e.emp_name, d.skill_grade,
   JOIN project   p ON p.project_id = s.project_id
   JOIN employee  e ON e.emp_id = s.evaluatee_emp_id
   JOIN developer d ON d.emp_id = s.evaluatee_emp_id
- WHERE p.status = 'COMPLETED' AND YEAR(p.end_date) = 2025
+ WHERE p.status = 'COMPLETED' AND YEAR(COALESCE(p.actual_end_date, p.end_date)) = 2025
  GROUP BY e.emp_id, e.emp_no, e.emp_name, d.skill_grade
  ORDER BY avg_score DESC, project_cnt DESC
  LIMIT 10;

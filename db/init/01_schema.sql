@@ -21,7 +21,8 @@ CREATE DATABASE IF NOT EXISTS si_pms
 USE si_pms;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS grade_history, eval_detail, eval_item, eval_type_weight,
+DROP TABLE IF EXISTS change_history, change_review, change_request,
+  grade_history, eval_detail, eval_item, eval_type_weight,
   peer_eval, pm_eval, customer_eval, evaluation,
   assignment, job_role, project_skill, project,
   employee_skill, skill, user_account, staff, developer, employee,
@@ -32,7 +33,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- 0. 자동 채번 카운터 (사번 / 프로젝트번호 규칙 채번용)
 -- ---------------------------------------------------------------------
 CREATE TABLE seq_counter (
-  seq_name  VARCHAR(20) NOT NULL COMMENT '채번 대상 (EMP_NO | PROJECT_CODE)',
+  seq_name  VARCHAR(20) NOT NULL COMMENT '채번 대상 (EMP_NO | PROJECT_CODE | CR_NO)',
   seq_year  SMALLINT    NOT NULL COMMENT '채번 기준 연도',
   last_seq  INT         NOT NULL DEFAULT 0 COMMENT '마지막으로 발급한 일련번호',
   PRIMARY KEY (seq_name, seq_year)
@@ -148,7 +149,8 @@ CREATE TABLE project (
   project_name    VARCHAR(100)  NOT NULL COMMENT '프로젝트명',
   client_id       INT           NOT NULL COMMENT '발주처 (FK)',
   start_date      DATE          NOT NULL COMMENT '착수일자',
-  end_date        DATE          NOT NULL COMMENT '종료일자 (진행 중: 예정일, 종료: 실제 종료일)',
+  end_date        DATE          NOT NULL COMMENT '종료예정일 (계약상 계획 종료일. 승인·동의된 변경요청 반영 시에만 변경)',
+  actual_end_date DATE          NULL     COMMENT '실제 종료일 (종료 처리 시 기록. 종료예정일과 구분)',
   status          ENUM('PLANNED','IN_PROGRESS','COMPLETED','CANCELLED') NOT NULL DEFAULT 'PLANNED' COMMENT '진행 상태',
   contract_amount DECIMAL(15,0) NULL     COMMENT '계약금액 (원)',
   description     VARCHAR(500)  NULL     COMMENT '프로젝트 개요',
@@ -157,7 +159,8 @@ CREATE TABLE project (
   PRIMARY KEY (project_id),
   UNIQUE KEY uk_project_code (project_code),
   CONSTRAINT fk_project_client FOREIGN KEY (client_id) REFERENCES client (client_id),
-  CONSTRAINT chk_project_period CHECK (start_date <= end_date)
+  CONSTRAINT chk_project_period CHECK (start_date <= end_date),
+  CONSTRAINT chk_project_actual CHECK (actual_end_date IS NULL OR actual_end_date >= start_date)
 ) COMMENT='프로젝트';
 
 CREATE TABLE project_skill (
@@ -293,3 +296,71 @@ CREATE TABLE grade_history (
   CONSTRAINT fk_gradehist_developer FOREIGN KEY (emp_id)            REFERENCES developer (emp_id) ON DELETE CASCADE,
   CONSTRAINT fk_gradehist_changer   FOREIGN KEY (changed_by_emp_id) REFERENCES employee (emp_id)
 ) COMMENT='기술등급 변경 이력 (AFTER UPDATE 트리거 자동 기록)';
+
+-- ---------------------------------------------------------------------
+-- 7. [조별 특화 시나리오 A] 고객사 변경요청 및 승인 관리
+--    변경요청(1) ─< 검토안(N, 재검토 시 버전 증가) ─ 적용이력(0..1)
+--    팀 초안의 5개 엔티티(요청·영향분석·승인·고객동의·적용) 중
+--    승인·고객동의는 검토안 1건당 1회씩만 일어나는 1:1 정보라 검토안에 통합 (docs/07 D-11)
+-- ---------------------------------------------------------------------
+CREATE TABLE change_request (
+  cr_id              INT           NOT NULL AUTO_INCREMENT COMMENT '변경요청 ID (PK)',
+  cr_no              VARCHAR(12)   NULL     COMMENT '요청번호 = CR + 요청연도(4) + - + 일련번호(3). BEFORE INSERT 트리거 자동 채번',
+  project_id         INT           NOT NULL COMMENT '대상 프로젝트 (FK)',
+  contact_id         INT           NOT NULL COMMENT '요청한 고객사 담당자 (FK → client_contact, 해당 프로젝트 발주처 소속)',
+  received_by_emp_id INT           NOT NULL COMMENT '접수 PM (FK → developer, 해당 프로젝트 PM)',
+  request_date       DATE          NOT NULL COMMENT '요청일',
+  title              VARCHAR(100)  NOT NULL COMMENT '요청 제목',
+  content            VARCHAR(1000) NOT NULL COMMENT '요청 내용',
+  reason             VARCHAR(500)  NULL     COMMENT '요청 사유',
+  status             ENUM('RECEIVED','REVIEWING','APPROVED','AGREED','APPLIED','REJECTED','DECLINED') NOT NULL DEFAULT 'RECEIVED'
+                     COMMENT '처리 상태 (최신 검토안 기준으로 트리거가 갱신)',
+  created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '등록일시',
+  PRIMARY KEY (cr_id),
+  UNIQUE KEY uk_cr_no (cr_no),
+  CONSTRAINT fk_cr_project FOREIGN KEY (project_id)         REFERENCES project (project_id),
+  CONSTRAINT fk_cr_contact FOREIGN KEY (contact_id)         REFERENCES client_contact (contact_id),
+  CONSTRAINT fk_cr_pm      FOREIGN KEY (received_by_emp_id) REFERENCES developer (emp_id)
+) COMMENT='고객사 변경요청';
+
+CREATE TABLE change_review (
+  review_id           INT           NOT NULL AUTO_INCREMENT COMMENT '검토안 ID (PK)',
+  cr_id               INT           NOT NULL COMMENT '변경요청 (FK)',
+  version_no          TINYINT       NOT NULL COMMENT '검토 차수 (승인 후 내용이 바뀌면 새 차수로 재검토)',
+  reviewer_emp_id     INT           NOT NULL COMMENT '영향분석 작성 PM (FK → developer)',
+  proposed_end_date   DATE          NOT NULL COMMENT '제안 종료예정일',
+  additional_amount   DECIMAL(15,0) NOT NULL DEFAULT 0 COMMENT '추가 계약금액 (원, 감액은 음수)',
+  review_comment      VARCHAR(1000) NULL     COMMENT '검토 의견 (영향 분석)',
+  reviewed_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '검토안 작성일시',
+  decision            ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '경영진 내부 결정',
+  decided_by_emp_id   INT           NULL     COMMENT '결정한 경영진 (FK → employee)',
+  decided_at          DATE          NULL     COMMENT '결정일',
+  decision_reason     VARCHAR(500)  NULL     COMMENT '승인·반려 사유',
+  consent             ENUM('PENDING','AGREED','DECLINED') NOT NULL DEFAULT 'PENDING' COMMENT '고객사 동의 (내부 승인 후에만 기록)',
+  consent_contact_id  INT           NULL     COMMENT '동의한 고객사 담당자 (FK → client_contact)',
+  consent_date        DATE          NULL     COMMENT '고객 확인일',
+  consent_evidence    VARCHAR(300)  NULL     COMMENT '확인 근거 (이메일, 회의록 등)',
+  consent_recorded_by INT           NULL     COMMENT '고객 동의 기록자 (FK → employee)',
+  PRIMARY KEY (review_id),
+  UNIQUE KEY uk_review_version (cr_id, version_no),
+  CONSTRAINT fk_review_cr       FOREIGN KEY (cr_id)               REFERENCES change_request (cr_id),
+  CONSTRAINT fk_review_pm       FOREIGN KEY (reviewer_emp_id)     REFERENCES developer (emp_id),
+  CONSTRAINT fk_review_decider  FOREIGN KEY (decided_by_emp_id)   REFERENCES employee (emp_id),
+  CONSTRAINT fk_review_contact  FOREIGN KEY (consent_contact_id)  REFERENCES client_contact (contact_id),
+  CONSTRAINT fk_review_recorder FOREIGN KEY (consent_recorded_by) REFERENCES employee (emp_id)
+) COMMENT='변경 검토안 (영향분석 + 내부 승인 + 고객 동의)';
+
+CREATE TABLE change_history (
+  history_id        INT           NOT NULL AUTO_INCREMENT COMMENT '적용이력 ID (PK)',
+  review_id         INT           NOT NULL COMMENT '반영한 검토안 (FK, UK: 같은 검토안 중복 반영 금지)',
+  before_end_date   DATE          NOT NULL COMMENT '변경 전 종료예정일',
+  after_end_date    DATE          NOT NULL COMMENT '변경 후 종료예정일',
+  before_amount     DECIMAL(15,0) NULL     COMMENT '변경 전 계약금액',
+  after_amount      DECIMAL(15,0) NULL     COMMENT '변경 후 계약금액',
+  applied_by_emp_id INT           NOT NULL COMMENT '반영자 (FK → employee)',
+  applied_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '반영일시',
+  PRIMARY KEY (history_id),
+  UNIQUE KEY uk_history_review (review_id),
+  CONSTRAINT fk_history_review  FOREIGN KEY (review_id)         REFERENCES change_review (review_id),
+  CONSTRAINT fk_history_applier FOREIGN KEY (applied_by_emp_id) REFERENCES employee (emp_id)
+) COMMENT='변경 적용 이력 (프로젝트 계획 변경 전후 값)';

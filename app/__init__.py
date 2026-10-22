@@ -35,12 +35,13 @@ def create_app():
     )
     app.teardown_appcontext(db.close_db)
 
-    from . import auth, employees, projects, evaluations, reports
+    from . import auth, changes, employees, projects, evaluations, reports
     app.register_blueprint(auth.bp)
     app.register_blueprint(employees.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(evaluations.bp)
     app.register_blueprint(reports.bp)
+    app.register_blueprint(changes.bp)
 
     @app.context_processor
     def inject_globals():

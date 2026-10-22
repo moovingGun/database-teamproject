@@ -290,6 +290,45 @@ def pick(p, role_id, s, e, rate=100, prefer=None):
 
 completed = [p for p in projects if p["status"] == "COMPLETED"]
 inprog = [p for p in projects if p["status"] == "IN_PROGRESS"]
+for p in projects:                                  # 종료 프로젝트는 실제 종료일 = 종료예정일
+    p["actual_end"] = p["end"] if p["status"] == "COMPLETED" else None
+
+# ---- [시나리오 A] 변경요청 시나리오 정의: (진행중 프로젝트 순번, 제목, 내용, 사유, [검토 차수...], 반영 여부)
+#      검토 차수 = (연장 일수, 추가금액, 검토의견, 결정, 결정사유, 결정자, 고객동의, 확인근거)
+CR_PLAN = [
+    (0, "통계 대시보드 화면 추가", "상담 이력을 일·주·월 단위로 보여 주는 관리자용 통계 대시보드 화면 3종을 추가해 달라는 요청",
+        "운영 부서가 상담 품질 지표를 매주 확인해야 함",
+        [(14, 5_000_000, "화면 3종 추가와 집계 쿼리 개발. 프로그래머 1명 2주 추가 필요", "APPROVED", "요청 범위가 타당하고 증액으로 비용 보전", 1,
+          "AGREED", "고객사 이메일 회신 (변경 합의서 첨부)")], True),
+    (0, "관리자 권한 세분화", "관리자 계정을 상담 관리자와 운영 관리자로 나누고 메뉴 접근 권한을 분리해 달라는 요청",
+        "고객사 내부 보안 감사 지적 사항",
+        [(10, 3_000_000, "권한 테이블 추가와 메뉴 접근 제어 수정, 통합 테스트 1주 추가", "PENDING", None, None, "PENDING", None)], False),
+    (1, "외부 결제(PG) 연동 추가", "온라인 결제 대행사(PG) 연동과 결제 취소·환불 화면을 추가해 달라는 요청",
+        "유료 서비스 출시 일정이 앞당겨짐",
+        [(21, 12_000_000, "PG 사 인증 일정 포함 3주 소요, 보안 점검 필요", "APPROVED", "매출 영향이 커서 우선 승인", 2, "PENDING", None)], False),
+    (2, "보고서 PDF 출력 기능", "조회 화면의 결과를 PDF 보고서로 내려받는 기능 추가 요청",
+        "임원 보고용 자료 작성 시간 단축",
+        [(7, 2_000_000, "출력 템플릿 5종 개발 1주", "REJECTED", "기존 계약의 '조회 결과 출력' 범위에 포함되어 추가 비용 없이 기존 일정 안에서 처리", 1, "PENDING", None)], False),
+    (3, "영문(다국어) 화면 지원", "전체 화면을 영문으로도 제공해 달라는 요청",
+        "해외 지사 사용자 추가",
+        [(20, 8_000_000, "전 화면 문구 분리와 번역 검수 포함 20일", "APPROVED", "해외 지사 확대 계획과 일치", 1, "AGREED", "주간 회의록 (고객사 서명)"),
+         (10, 4_000_000, "고객이 범위를 주요 화면 12개로 축소 → 재검토, 10일·400만 원", "PENDING", None, None, "PENDING", None)], False),
+    (4, "모바일 반응형 화면 적용", "현장 직원이 휴대폰으로 조회할 수 있도록 주요 화면을 반응형으로 바꿔 달라는 요청",
+        "현장 점검 업무의 모바일 전환", [], False),
+    (5, "데이터 이관 범위 확대", "기존 시스템 데이터 이관 범위를 최근 5년에서 최근 10년으로 늘려 달라는 요청",
+        "과거 이력 조회 수요",
+        [(30, 15_000_000, "이관 대상 4배 증가, 정합성 검증 2주 추가", "APPROVED", "필요성은 인정, 비용은 고객 부담 조건", 2, "DECLINED", "고객사 예산 부족으로 거절 (전화 확인 후 이메일 회신)")], False),
+    (6, "실시간 알림 기능 추가", "결재 요청이 오면 메신저와 이메일로 즉시 알림을 보내는 기능 추가 요청",
+        "결재 지연 민원 증가",
+        [(30, 6_000_000, "알림 서버 구성과 메신저 연동 4주", "APPROVED", "고객 만족도 개선 효과가 큼", 2, "AGREED", "변경 합의서 서명본 (우편 수령)")], True),
+]
+for pi, *_rest, applied in CR_PLAN:              # 반영된 요청은 종료예정일·계약금액을 미리 늘려 둠
+    if applied:
+        p = inprog[pi]
+        ext, add = _rest[3][0][0], _rest[3][0][1]
+        p["orig_end"], p["orig_amount"] = p["end"], p["amount"]
+        p["end"] = p["end"] + timedelta(days=ext)
+        p["amount"] = p["amount"] + add
 PM01_COMPLETED = completed[-1]["project_id"]    # pm01 이 PM 인 종료 프로젝트 (가장 최근 종료)
 PM01_INPROG = inprog[0]["project_id"]
 DEV01_INPROG = inprog[1]["project_id"]
@@ -305,20 +344,20 @@ for p in projects:
     if pm: assign(p, pm, 1, s, e)
     pl = pick(p, 2, s, e)
     if pl: assign(p, pl, 2, s, e)
-    inprog = p["status"] == "IN_PROGRESS"
-    for _ in range(1 if inprog else random.randint(1, 2)):         # 분석자: 전반부, 50% 투입 허용
+    is_inprog = p["status"] == "IN_PROGRESS"
+    for _ in range(1 if is_inprog else random.randint(1, 2)):      # 분석자: 전반부, 50% 투입 허용
         rate = random.choice([50, 100])
         a = pick(p, 3, s, pct(0.5), rate)
         if a: assign(p, a, 3, s, pct(0.5), rate, "분석 단계 투입" if rate == 100 else "분석 단계 50% 투입")
     d = pick(p, 4, pct(0.15), pct(0.7))                             # 설계자
     if d: assign(p, d, 4, pct(0.15), pct(0.7), 100, "설계 단계 투입")
-    n_prog = random.randint(2, 3) if inprog else random.randint(2, 5)
+    n_prog = random.randint(2, 3) if is_inprog else random.randint(2, 5)
     for i in range(n_prog):                                        # 프로그래머
         ps = s if i % 2 == 0 else pct(0.25)
         prefer = 4 if (p["project_id"] == DEV01_INPROG and i == 0) else None
         pr = pick(p, 5, ps, e, prefer=prefer)
         if pr: assign(p, pr, 5, ps, e, 100, None if i % 2 == 0 else "개발 단계 중간 투입")
-    for _ in range(1 if inprog else random.randint(1, 2)):         # 테스터: 후반부
+    for _ in range(1 if is_inprog else random.randint(1, 2)):      # 테스터: 후반부
         t = pick(p, 6, pct(0.6), e)
         if t: assign(p, t, 6, pct(0.6), e, 100, "테스트 단계 투입")
 
@@ -384,6 +423,33 @@ for p in completed:
                 e = add_eval(p, m, "CUSTOMER", "REPORTED", base_date + timedelta(days=7))
                 customer_evals.append((e, contact, pm, base_date, token(), base_date + timedelta(days=9)))
 
+# --------------------------------------------------------------------- [시나리오 A] 변경요청 행
+change_requests, change_reviews, change_histories = [], [], []
+crid, rvid = 1, 1
+for pi, title, content, reason, versions, applied in CR_PLAN:
+    p = inprog[pi]
+    pm = next(a["emp_id"] for a in assignments if a["project_id"] == p["project_id"] and a["role_id"] == 1)
+    contacts_of = CONTACTS_BY_CLIENT[p["client"]]
+    req_date = min(p["start"] + timedelta(days=20 + 9 * len(change_requests) % 30), TODAY - timedelta(days=25))
+    req_date = max(req_date, p["start"])
+    change_requests.append((crid, p["project_id"], contacts_of[0], pm, req_date, title, content, reason))
+    d = req_date
+    for v, (ext, add, comment, dec, dec_reason, decider, consent, evidence) in enumerate(versions, 1):
+        base_end = p["orig_end"] if applied else p["end"]      # 미반영 요청은 현재 종료예정일 기준
+        reviewed = d + timedelta(days=3)
+        decided = reviewed + timedelta(days=4) if dec != "PENDING" else None
+        consented = decided + timedelta(days=4) if consent != "PENDING" else None
+        change_reviews.append((rvid, crid, v, pm, base_end + timedelta(days=ext), add, comment, f"{reviewed} 10:00:00",
+                               dec, decider, decided, dec_reason, consent,
+                               contacts_of[-1] if consent != "PENDING" else None, consented, evidence,
+                               pm if consent != "PENDING" else None))
+        if applied and v == len(versions):
+            change_histories.append((rvid, p["orig_end"], p["end"], p["orig_amount"], p["amount"],
+                                     pm if pi == 0 else 2, f"{consented + timedelta(days=2)} 09:30:00"))
+        d = (consented or decided or reviewed) + timedelta(days=5)
+        rvid += 1
+    crid += 1
+
 # --------------------------------------------------------------------- 등급 변경 이력 (과거 승급 기록)
 grade_hist = []
 order = ["초급", "중급", "고급", "특급"]
@@ -425,8 +491,8 @@ parts = [
     rows("employee_skill", ["emp_id", "skill_id", "proficiency", "years_used", "last_used_date"], emp_skills),
     "",
     "-- 프로젝트 : project_code 는 트리거가 자동 채번 ---------------------------------",
-    rows("project", ["project_id", "project_name", "client_id", "start_date", "end_date", "status", "contract_amount", "description"],
-         [(p["project_id"], p["name"], p["client"], p["start"], p["end"], p["status"], p["amount"], p["desc"]) for p in projects]),
+    rows("project", ["project_id", "project_name", "client_id", "start_date", "end_date", "actual_end_date", "status", "contract_amount", "description"],
+         [(p["project_id"], p["name"], p["client"], p["start"], p["end"], p["actual_end"], p["status"], p["amount"], p["desc"]) for p in projects]),
     rows("project_skill", ["project_id", "skill_id", "required_level"], project_skills),
     "",
     "-- 투입 (트리거 BR-01~07 검증 통과) -------------------------------------------",
@@ -439,6 +505,14 @@ parts = [
     rows("pm_eval", ["eval_id", "evaluator_emp_id", "recommend_incentive"], pm_evals),
     rows("peer_eval", ["eval_id", "evaluator_emp_id", "is_anonymous"], peer_evals),
     rows("eval_detail", ["eval_id", "item_id", "score", "comment"], eval_details),
+    "",
+    "-- [시나리오 A] 고객사 변경요청 (요청번호는 트리거 자동 채번, BR-16~23 검증 통과) --------",
+    rows("change_request", ["cr_id", "project_id", "contact_id", "received_by_emp_id", "request_date", "title", "content", "reason"], change_requests),
+    rows("change_review", ["review_id", "cr_id", "version_no", "reviewer_emp_id", "proposed_end_date", "additional_amount", "review_comment",
+                           "reviewed_at", "decision", "decided_by_emp_id", "decided_at", "decision_reason", "consent", "consent_contact_id",
+                           "consent_date", "consent_evidence", "consent_recorded_by"], change_reviews),
+    rows("change_history", ["review_id", "before_end_date", "after_end_date", "before_amount", "after_amount", "applied_by_emp_id", "applied_at"],
+         change_histories),
     "",
     "-- 기술등급 변경 이력 -------------------------------------------------------",
     rows("grade_history", ["emp_id", "old_grade", "new_grade", "changed_at", "changed_by_emp_id", "reason"], grade_hist),
@@ -457,4 +531,5 @@ for p in projects:
     by_status[p["status"]] = by_status.get(p["status"], 0) + 1
 print("projects by status:", by_status)
 print("reserved (available now) devs:", sorted(RESERVED))
+print(f"change requests={len(change_requests)} reviews={len(change_reviews)} applied={len(change_histories)}")
 print("assignments per project:", {p["project_id"]: len([a for a in assignments if a["project_id"] == p["project_id"]]) for p in projects})

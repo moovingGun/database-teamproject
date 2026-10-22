@@ -99,5 +99,37 @@ SET @app_user_id = 1, @grade_change_reason = '검증 테스트';
 UPDATE developer SET skill_grade = '중급' WHERE emp_id = @junior;
 SELECT emp_id, old_grade, new_grade, changed_by_emp_id, reason FROM grade_history WHERE emp_id = @junior ORDER BY history_id DESC LIMIT 1;
 
+-- ---------------------------------------------------------------------
+-- [조별 특화 시나리오 A] 변경요청 규칙 (BR-16 ~ BR-23)
+-- ---------------------------------------------------------------------
+SET @cr_prj := (SELECT project_id FROM change_request WHERE status = 'REVIEWING' ORDER BY cr_id LIMIT 1);
+SET @cr_pm  := (SELECT received_by_emp_id FROM change_request WHERE project_id = @cr_prj LIMIT 1);
+SET @cr_contact := (SELECT contact_id FROM client_contact WHERE client_id = (SELECT client_id FROM project WHERE project_id = @cr_prj) LIMIT 1);
+SET @cr_pending := (SELECT cr_id FROM change_request WHERE status = 'REVIEWING' ORDER BY cr_id LIMIT 1);
+SET @rv_pending := (SELECT MAX(review_id) FROM change_review WHERE cr_id = @cr_pending);
+SET @rv_decided := (SELECT review_id FROM change_review WHERE decision = 'REJECTED' LIMIT 1);
+SET @non_pm := (SELECT a.emp_id FROM assignment a JOIN job_role r ON r.role_id = a.role_id WHERE a.project_id = @cr_prj AND r.role_code <> 'PM' LIMIT 1);
+
+SELECT '[BR-18] PM 이 아닌 참여자가 변경요청 접수 → 거부' AS test;
+INSERT INTO change_request (project_id, contact_id, received_by_emp_id, request_date, title, content)
+VALUES (@cr_prj, @cr_contact, @non_pm, CURDATE(), 'x', 'x');
+
+SELECT '[BR-19] 차수를 건너뛴 검토안 (3차) → 거부' AS test;
+INSERT INTO change_review (cr_id, version_no, reviewer_emp_id, proposed_end_date) VALUES (@cr_pending, 9, @cr_pm, CURDATE());
+
+SELECT '[BR-21] 경영진이 아닌 직원의 승인 → 거부' AS test;
+UPDATE change_review SET decision = 'APPROVED', decided_by_emp_id = @cr_pm, decided_at = CURDATE() WHERE review_id = @rv_pending;
+
+SELECT '[BR-20] 결정이 난 검토안의 금액 수정 → 거부' AS test;
+UPDATE change_review SET additional_amount = additional_amount + 1 WHERE review_id = @rv_decided;
+
+SELECT '[BR-23] 승인·동의 전 적용이력 직접 입력 → 거부' AS test;
+INSERT INTO change_history (review_id, before_end_date, after_end_date, applied_by_emp_id) VALUES (@rv_pending, CURDATE(), CURDATE(), 1);
+
+SELECT '[BR-16] 요청번호 자동 채번 확인 → 성공' AS test;
+INSERT INTO change_request (project_id, contact_id, received_by_emp_id, request_date, title, content)
+VALUES (@cr_prj, @cr_contact, @cr_pm, CURDATE(), '채번 확인', '채번 확인');
+SELECT cr_no, status FROM change_request ORDER BY cr_id DESC LIMIT 1;
+
 ROLLBACK;
 SELECT '검증 종료 (ROLLBACK 완료 - 데이터 변경 없음)' AS done;
