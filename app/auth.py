@@ -110,19 +110,15 @@ def signup():
 
         if not errors:
             try:
-                # 슈퍼타입 → 서브타입 → 계정 순으로 한 트랜잭션에 등록. 사번은 트리거가 채번.
+                # 슈퍼타입+서브타입은 등록 프로시저로 한 번에(BR-30 전체 참여), 계정까지 한 트랜잭션. 사번은 트리거가 채번.
+                dev = emp_type == "DEV"
                 db.execute(
-                    """INSERT INTO employee (emp_name, resident_reg_no, education_level, hire_date, emp_type, email, phone)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    "CALL sp_register_employee(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, @emp_id, @emp_no)",
                     (form["emp_name"].strip(), rrn, form["education_level"], form["hire_date"], emp_type,
-                     form.get("email") or None, form.get("phone") or None))
-                emp = db.query("SELECT emp_id, emp_no FROM employee WHERE resident_reg_no = %s", (rrn,), one=True)
-                if emp_type == "DEV":
-                    db.execute("INSERT INTO developer (emp_id, skill_grade, career_start_date) VALUES (%s, %s, %s)",
-                               (emp["emp_id"], form["skill_grade"], form["career_start_date"]))
-                else:
-                    db.execute("INSERT INTO staff (emp_id, department, job_title) VALUES (%s, %s, %s)",
-                               (emp["emp_id"], form["department"], form.get("job_title") or None))
+                     form.get("email") or None, form.get("phone") or None,
+                     form["skill_grade"] if dev else None, form["career_start_date"] if dev else None,
+                     None if dev else form["department"], None if dev else (form.get("job_title") or None)))
+                emp = db.query("SELECT @emp_id AS emp_id, @emp_no AS emp_no", one=True)
                 db.execute("INSERT INTO user_account (emp_id, login_id, password_hash) VALUES (%s, %s, %s)",
                            (emp["emp_id"], login_id, generate_password_hash(pw, method="pbkdf2:sha256")))
                 db.commit()

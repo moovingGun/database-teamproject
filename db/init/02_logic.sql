@@ -15,14 +15,15 @@ SET NAMES utf8mb4;
 --   BR-09 피평가자는 해당 프로젝트 참여자
 --   BR-10 서브타입 평가는 슈퍼타입의 eval_type 과 일치
 --   BR-11 고객 평가자는 해당 프로젝트 발주처의 담당자
---   BR-12 고객 평가 의뢰는 프로젝트 PM 만 가능
+--   BR-12 고객 평가 의뢰는 프로젝트 PM 만 가능, 피평가자당 1건
 --   BR-13 PM 평가의 평가자는 프로젝트 PM, 자기 자신은 평가 불가, 피평가자당 1건
 --   BR-14 동료 평가의 평가자는 참여자, 자기 자신은 평가 불가, (평가자,피평가자)당 1건
 --   BR-15 기술등급 변경 시 이력 자동 기록
 --   BR-30 직원 서브타입은 판별자(emp_type)와 일치하고 배타적 (개발자이면서 지원직일 수 없음),
---         서브타입 행이 있는 직원의 판별자는 바꿀 수 없음
---         ※ '모든 직원은 서브타입을 반드시 가진다'(전체 참여)는 직원·서브타입을 한 트랜잭션으로 등록해 보장
---           (MySQL 은 지연 제약을 지원하지 않아 행 단위 트리거로는 검사 불가 — 회원가입·시드가 같은 트랜잭션에서 등록)
+--         서브타입 행이 있는 직원의 판별자는 바꿀 수 없음,
+--         모든 직원은 서브타입을 반드시 가짐(전체 참여): 직원 등록은 sp_register_employee 로만 (직원+서브타입 한 번에)
+--         ※ MySQL 은 지연 제약이 없어 행 트리거로는 검사 불가 → 앱 계정(pms)의 employee/developer/staff
+--           직접 INSERT·DELETE 권한을 회수하고(04_privileges.sql) 등록 프로시저만 쓰게 하여 보장
 --   ── 조별 특화 시나리오 A: 고객사 변경요청 및 승인 관리 ──
 --   BR-16 변경요청은 예정·진행 중 프로젝트에만, 요청번호 자동 채번
 --   BR-17 요청한 담당자는 해당 프로젝트 발주처 소속
@@ -50,6 +51,7 @@ DROP TRIGGER   IF EXISTS trg_employee_bi;
 DROP TRIGGER   IF EXISTS trg_employee_bu;
 DROP TRIGGER   IF EXISTS trg_developer_bi;
 DROP TRIGGER   IF EXISTS trg_staff_bi;
+DROP PROCEDURE IF EXISTS sp_register_employee;
 DROP TRIGGER   IF EXISTS trg_project_bi;
 DROP TRIGGER   IF EXISTS trg_assignment_bi;
 DROP TRIGGER   IF EXISTS trg_assignment_bu;
@@ -141,6 +143,39 @@ BEGIN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 서브타입이 등록된 직원의 구분(emp_type)은 바꿀 수 없습니다.';
     END IF;
   END IF;
+END$$
+
+-- [BR-30] 전체 참여: 직원(슈퍼타입)과 서브타입을 한 번에 등록. 앱 계정은 이 프로시저로만 직원을 만들 수 있다.
+--   서브타입 등록이 실패하면 방금 넣은 직원 행을 지우고 오류를 다시 던지므로, autocommit 호출에서도 서브타입 없는 직원이 남지 않는다.
+CREATE PROCEDURE sp_register_employee(
+  IN p_name VARCHAR(50), IN p_rrn CHAR(14), IN p_edu VARCHAR(10), IN p_hire DATE, IN p_type VARCHAR(10),
+  IN p_email VARCHAR(100), IN p_phone VARCHAR(20),
+  IN p_grade VARCHAR(10), IN p_career DATE,       -- 개발자(DEV) 서브타입 속성
+  IN p_dept VARCHAR(20), IN p_title VARCHAR(50),  -- 지원직(STAFF) 서브타입 속성
+  OUT p_emp_id INT, OUT p_emp_no CHAR(7))
+BEGIN
+  -- strict 모드의 ENUM 값 오류(1265)는 SQLSTATE 01000 이라 SQLEXCEPTION 에 안 잡혀 번호로 따로 지정
+  -- (SQLWARNING 전체를 잡으면 단순 경고에도 직원 행이 지워져 OUT 사번이 없는 행을 가리키게 됨)
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION, 1265
+  BEGIN
+    IF p_emp_id IS NOT NULL THEN
+      DELETE FROM employee WHERE emp_id = p_emp_id;
+    END IF;
+    RESIGNAL;
+  END;
+  SET p_emp_id = NULL, p_emp_no = NULL;
+  IF (p_type = 'DEV' AND (p_grade IS NULL OR p_career IS NULL)) OR (p_type = 'STAFF' AND p_dept IS NULL) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 서브타입 정보(개발자: 기술등급·경력 기산일 / 지원직: 부서)가 있어야 직원을 등록할 수 있습니다.';
+  END IF;
+  INSERT INTO employee (emp_name, resident_reg_no, education_level, hire_date, emp_type, email, phone)
+  VALUES (p_name, p_rrn, p_edu, p_hire, p_type, p_email, p_phone);
+  SET p_emp_id = LAST_INSERT_ID();
+  IF p_type = 'DEV' THEN
+    INSERT INTO developer (emp_id, skill_grade, career_start_date) VALUES (p_emp_id, p_grade, p_career);
+  ELSE
+    INSERT INTO staff (emp_id, department, job_title) VALUES (p_emp_id, p_dept, p_title);
+  END IF;
+  SELECT emp_no INTO p_emp_no FROM employee WHERE emp_id = p_emp_id;
 END$$
 
 CREATE TRIGGER trg_project_bi BEFORE INSERT ON project FOR EACH ROW
@@ -258,9 +293,10 @@ CREATE TRIGGER trg_customer_eval_bi BEFORE INSERT ON customer_eval FOR EACH ROW
 BEGIN
   DECLARE v_type VARCHAR(10);
   DECLARE v_project INT;
+  DECLARE v_evaluatee INT;
   DECLARE v_client INT;
   DECLARE v_cnt INT DEFAULT 0;
-  SELECT eval_type, project_id INTO v_type, v_project FROM evaluation WHERE eval_id = NEW.eval_id;
+  SELECT eval_type, project_id, evaluatee_emp_id INTO v_type, v_project, v_evaluatee FROM evaluation WHERE eval_id = NEW.eval_id;
   IF v_type <> 'CUSTOMER' THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-10] 평가 유형이 CUSTOMER 인 평가에만 등록할 수 있습니다.';
   END IF;
@@ -274,6 +310,12 @@ BEGIN
    WHERE a.project_id = v_project AND a.emp_id = NEW.requested_by_emp_id AND r.role_code = 'PM';
   IF v_cnt = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-12] 고객 평가 의뢰는 해당 프로젝트 PM만 할 수 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt
+    FROM customer_eval ce JOIN evaluation e ON e.eval_id = ce.eval_id
+   WHERE e.project_id = v_project AND e.evaluatee_emp_id = v_evaluatee;
+  IF v_cnt > 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-12] 해당 직원에 대한 고객 평가가 이미 의뢰되어 있습니다.';
   END IF;
 END$$
 

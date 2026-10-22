@@ -87,6 +87,12 @@ INSERT INTO pm_eval (eval_id, evaluator_emp_id) VALUES (LAST_INSERT_ID(), @pm_do
 SELECT '[CHECK] 평점 6점 → 거부' AS test;
 INSERT INTO eval_detail (eval_id, item_id, score) VALUES (LAST_INSERT_ID(), 1, 6);
 
+SELECT '[BR-12] 이미 고객 평가가 의뢰된 직원에게 다시 의뢰 → 거부' AS test;
+SELECT e.project_id, e.evaluatee_emp_id, c.contact_id, c.requested_by_emp_id INTO @ce_prj, @ce_emp, @ce_contact, @ce_pm
+  FROM evaluation e JOIN customer_eval c ON c.eval_id = e.eval_id ORDER BY e.eval_id LIMIT 1;
+INSERT INTO evaluation (project_id, evaluatee_emp_id, eval_type, status) VALUES (@ce_prj, @ce_emp, 'CUSTOMER', 'REQUESTED');
+INSERT INTO customer_eval (eval_id, contact_id, requested_by_emp_id, access_token) VALUES (LAST_INSERT_ID(), @ce_contact, @ce_pm, REPLACE(UUID(), '-', ''));
+
 SELECT '[UK] 로그인 ID 중복(dev01) → 거부' AS test;
 INSERT INTO employee (emp_name, resident_reg_no, education_level, hire_date, emp_type) VALUES ('테스트', '990101-1234567', '학사', CURDATE(), 'DEV');
 INSERT INTO user_account (emp_id, login_id, password_hash) VALUES (LAST_INSERT_ID(), 'dev01', 'x');
@@ -110,6 +116,13 @@ SELECT '[BR-30] 개발자 직원에게 지원직 서브타입 추가 → 거부'
 INSERT INTO staff (emp_id, department) VALUES (@dv30, 'RND');
 SELECT '[BR-30] 서브타입이 있는 직원의 구분 변경 → 거부' AS test;
 UPDATE employee SET emp_type = 'STAFF' WHERE emp_id = @dv30;
+SELECT '[BR-30] 서브타입 정보 없이 등록 프로시저 호출 → 거부 (직원 행도 남지 않음)' AS test;
+CALL sp_register_employee('전체참여시험', '990707-1234567', '학사', CURDATE(), 'DEV', NULL, NULL, NULL, NULL, NULL, NULL, @e30, @n30);
+SELECT COUNT(*) AS left_rows FROM employee WHERE resident_reg_no = '990707-1234567';
+SELECT '[BR-30] 등록 프로시저로 개발자 등록 → 성공 (직원 + 개발자 서브타입 함께 생성)' AS test;
+CALL sp_register_employee('전체참여시험', '990707-1234567', '학사', CURDATE(), 'DEV', NULL, NULL, '초급', CURDATE(), NULL, NULL, @e30, @n30);
+SELECT @n30 AS emp_no, e.emp_type, d.skill_grade FROM employee e JOIN developer d ON d.emp_id = e.emp_id WHERE e.emp_id = @e30;
+-- 앱 계정(pms)이 employee/developer/staff 에 직접 INSERT·DELETE 하면 권한 오류(1142) — scripts/e2e_test.sh 에서 확인
 
 -- ---------------------------------------------------------------------
 -- [조별 특화 시나리오 A] 변경요청 규칙 (BR-16 ~ BR-23)

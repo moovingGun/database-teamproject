@@ -20,6 +20,10 @@
 >
 > 표기 규칙: `||` 정확히 1 (필수) · `o|` 0 또는 1 · `o{` 0 이상 (선택) · `|{` 1 이상 (필수)
 > **모든 1:N 관계의 1측은 `o{` (Partial)** 로 설계하여 Total:Total 참여를 두지 않았다 (§3).
+>
+> **슈퍼타입-서브타입 표기 (ERD 이미지)**: 슈퍼타입과 서브타입 사이에 IE 서브타입 기호를 둔다.
+> `⊗` = 배타적(Exclusive, 한 직원·평가는 서브타입 하나에만 속함) · 기호 옆 **이중선** = 완전(Complete, 모든 인스턴스가 서브타입 하나를 가짐) · 기호 옆 주황 글자 = 판별자(`emp_type`, `eval_type`).
+> 아래 Mermaid 는 서브타입 기호를 지원하지 않아 `is-a` 1:0..1 관계로만 적었으므로, **보고서에는 `docs/erd/` 이미지를 사용**한다.
 
 ## 1. 전체 ERD
 
@@ -299,7 +303,7 @@ erDiagram
 
 | 가이드라인 | 반영 |
 |---|---|
-| "프로젝트 평가"와 "직원"은 슈퍼타입-서브타입 | **EMPLOYEE** → DEVELOPER / STAFF (판별자 `emp_type`, 배타적·전체 참여). **EVALUATION** → CUSTOMER_EVAL / PM_EVAL / PEER_EVAL (판별자 `eval_type`, 배타적·전체 참여). 서브타입 PK = 슈퍼타입 PK (1:1, ON DELETE CASCADE). 서브타입-판별자 불일치와 서브타입 중복은 트리거로 차단 (평가 BR-10, 직원 BR-30) |
+| "프로젝트 평가"와 "직원"은 슈퍼타입-서브타입 | **EMPLOYEE** → DEVELOPER / STAFF (판별자 `emp_type`, 배타적·전체 참여). **EVALUATION** → CUSTOMER_EVAL / PM_EVAL / PEER_EVAL (판별자 `eval_type`, 배타적·전체 참여). 서브타입 PK = 슈퍼타입 PK (1:1, ON DELETE CASCADE). 서브타입-판별자 불일치와 서브타입 중복은 트리거로 차단 (평가 BR-10, 직원 BR-30). ERD 이미지에서는 IE 서브타입 기호(⊗ 배타 + 이중선 완전 + 판별자)로 표현 |
 | "발주처"는 별도 엔티티 | **CLIENT** (사업자등록번호 UK) + **CLIENT_CONTACT** 1:N. 고객 평가의 평가자는 CLIENT_CONTACT 를 참조하여 "고객이 평가한다" 를 데이터 모델로 표현 |
 | M:N 관계 지양 | 개발자–기술 → **EMPLOYEE_SKILL**, 프로젝트–기술 → **PROJECT_SKILL**, 개발자–프로젝트 → **ASSIGNMENT** (직무·기간·투입률을 가진 교차 엔티티로 승격). 시나리오 B 의 역량개선계획–교육일정 → **TRAINING_ENROLLMENT** (신청 상태·출석을 가진 교차 엔티티) |
 | 1:N 에서 Total:Total 지양 | 모든 1:N 의 1측을 Partial 로 설계 (§3) |
