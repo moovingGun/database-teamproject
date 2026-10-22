@@ -10,6 +10,14 @@ flash() { grep -o '<div class="flash [a-z]*">[^<]*' "$T/p" | sed 's/<div class="
 login() { curl -s -c "$T/$1" -o /dev/null "$B/auth/login"; curl -s -b "$T/$1" -c "$T/$1" -o /dev/null -d "login_id=$1&password=${2:-pass1234}" "$B/auth/login"; }
 post() { local u=$1 path=$2; shift 2; curl -s -b "$T/$u" -c "$T/$u" -o "$T/p" -L "$@" "$B$path"; flash; }
 for u in ceo pm01 dev01; do login $u; done
+# 프로젝트·직원 번호는 시드에 따라 바뀌므로 DB 에서 찾는다
+PM_INPROG=$(q "SELECT a.project_id FROM assignment a JOIN job_role r USING(role_id) JOIN project p USING(project_id) WHERE a.emp_id=3 AND r.role_code='PM' AND p.status='IN_PROGRESS' LIMIT 1")
+PM_DONE=$(q "SELECT a.project_id FROM assignment a JOIN job_role r USING(role_id) JOIN project p USING(project_id) WHERE a.emp_id=3 AND r.role_code='PM' AND p.status='COMPLETED' LIMIT 1")
+OTHER_INPROG=$(q "SELECT project_id FROM project WHERE status='IN_PROGRESS' AND project_id<>$PM_INPROG ORDER BY start_date LIMIT 1")
+OTHER_END=$(q "SELECT end_date FROM project WHERE project_id=$OTHER_INPROG")
+FREE_DEV=$(q "SELECT d.emp_id FROM developer d JOIN employee e USING(emp_id) WHERE e.hire_date<'2026-11-01' AND NOT EXISTS (SELECT 1 FROM assignment a WHERE a.emp_id=d.emp_id AND a.start_date<='$OTHER_END' AND a.end_date>='2026-11-01') ORDER BY d.emp_id LIMIT 1")
+FREE_SENIOR=$(q "SELECT d.emp_id FROM developer d JOIN employee e USING(emp_id) WHERE d.skill_grade IN ('고급','특급') AND d.emp_id<>$FREE_DEV AND e.hire_date<'2026-11-01' AND NOT EXISTS (SELECT 1 FROM assignment a WHERE a.emp_id=d.emp_id AND a.start_date<='2027-03-31' AND a.end_date>='2026-11-01') ORDER BY d.emp_id LIMIT 1")
+echo "대상: pm01 진행=$PM_INPROG 종료=$PM_DONE, 다른 진행=$OTHER_INPROG, 가용 개발자=$FREE_DEV, 가용 고급=$FREE_SENIOR"
 
 echo "== 1. 회원가입: 중복 ID [기대: 에러 메시지]"
 curl -s -c "$T/new" -o /dev/null "$B/auth/signup"
@@ -36,19 +44,19 @@ curl -s -b "$T/pm01" -o /dev/null -X POST "$B/projects/$PRJ/customer-eval/report
 q "SELECT status, COUNT(*) FROM evaluation WHERE project_id=$PRJ AND eval_type='CUSTOMER' GROUP BY status"
 
 echo "== 5. 투입: 100% 투입자 추가 [기대: BR-05 거부] / 가용 개발자 [기대: 성공]"
-post ceo /projects/16/assignments --data-urlencode emp_id=3 --data-urlencode role_id=5 --data-urlencode start_date= --data-urlencode end_date= --data-urlencode participation_rate=50
-post ceo /projects/16/assignments --data-urlencode emp_id=5 --data-urlencode role_id=6 --data-urlencode start_date=2026-11-01 --data-urlencode end_date= --data-urlencode participation_rate=100
+post ceo /projects/$OTHER_INPROG/assignments --data-urlencode emp_id=3 --data-urlencode role_id=5 --data-urlencode start_date= --data-urlencode end_date= --data-urlencode participation_rate=50
+post ceo /projects/$OTHER_INPROG/assignments --data-urlencode emp_id=$FREE_DEV --data-urlencode role_id=6 --data-urlencode start_date=2026-11-01 --data-urlencode end_date= --data-urlencode participation_rate=100
 
 echo "== 6. 기술등급 변경 [기대: 이력 자동 기록]"
-post ceo /employees/5/grade --data-urlencode skill_grade=특급 --data-urlencode reason=e2e승급
-q "SELECT old_grade, new_grade, changed_by_emp_id, reason FROM grade_history WHERE emp_id=5 ORDER BY history_id DESC LIMIT 1"
+post ceo /employees/$FREE_DEV/grade --data-urlencode skill_grade=특급 --data-urlencode reason=e2e승급
+q "SELECT old_grade, new_grade, changed_by_emp_id, reason FROM grade_history WHERE emp_id=$FREE_DEV ORDER BY history_id DESC LIMIT 1"
 
 echo "== 7. 프로젝트 등록 → 착수 → PM 투입 → 종료 [기대: 번호 자동, 실제 종료일 따로 기록]"
 curl -s -b "$T/ceo" -o /dev/null --data-urlencode project_name=e2e프로젝트 --data-urlencode client_id=1 --data-urlencode start_date=2026-11-01 \
   --data-urlencode end_date=2027-03-31 --data-urlencode status=PLANNED --data-urlencode contract_amount=100000000 "$B/projects/new"
 P=$(q "SELECT MAX(project_id) FROM project")
 curl -s -b "$T/ceo" -o /dev/null -d action=start "$B/projects/$P/status"
-curl -s -b "$T/ceo" -o /dev/null --data-urlencode emp_id=7 --data-urlencode role_id=1 --data-urlencode start_date= --data-urlencode end_date= --data-urlencode participation_rate=100 "$B/projects/$P/assignments"
+curl -s -b "$T/ceo" -o /dev/null --data-urlencode emp_id=$FREE_SENIOR --data-urlencode role_id=1 --data-urlencode start_date= --data-urlencode end_date= --data-urlencode participation_rate=100 "$B/projects/$P/assignments"
 curl -s -b "$T/ceo" -o /dev/null -d "action=complete&actual_end_date=2027-01-31" "$B/projects/$P/status"
 q "SELECT project_code, status, end_date AS 종료예정일, actual_end_date AS 실제종료일, (SELECT MAX(end_date) FROM assignment WHERE project_id=$P) AS 투입종료 FROM project WHERE project_id=$P"
 
@@ -60,30 +68,30 @@ post dev01 "/evaluations/new?$PEER" --data-urlencode score_1=4 --data-urlencode 
 q "SELECT education_level, phone FROM employee WHERE emp_id=4"
 
 echo "== 9. [시나리오 A] 변경요청 전체 흐름: 접수 → 검토안 → 승인 → 고객 동의 → 반영"
-P15=$(q "SELECT CONCAT(end_date,' ',contract_amount) FROM project WHERE project_id=15"); echo "반영 전 project 15: $P15"
-C=$(q "SELECT contact_id FROM client_contact WHERE client_id=(SELECT client_id FROM project WHERE project_id=15) LIMIT 1")
-post pm01 /projects/15/changes --data-urlencode contact_id=$C --data-urlencode request_date=2026-10-20 --data-urlencode title=e2e검색필터추가 --data-urlencode content=상담이력검색필터 --data-urlencode reason=운영요청
-CR=$(q "SELECT MAX(cr_id) FROM change_request"); NEWEND=$(q "SELECT DATE_ADD(end_date, INTERVAL 7 DAY) FROM project WHERE project_id=15")
+P15=$(q "SELECT CONCAT(end_date,' ',contract_amount) FROM project WHERE project_id=$PM_INPROG"); echo "반영 전 pm01 진행 프로젝트: $P15"
+C=$(q "SELECT contact_id FROM client_contact WHERE client_id=(SELECT client_id FROM project WHERE project_id=$PM_INPROG) LIMIT 1")
+post pm01 /projects/$PM_INPROG/changes --data-urlencode contact_id=$C --data-urlencode request_date=2026-10-20 --data-urlencode title=e2e검색필터추가 --data-urlencode content=상담이력검색필터 --data-urlencode reason=운영요청
+CR=$(q "SELECT MAX(cr_id) FROM change_request"); NEWEND=$(q "SELECT DATE_ADD(end_date, INTERVAL 7 DAY) FROM project WHERE project_id=$PM_INPROG")
 post pm01 /changes/$CR/reviews --data-urlencode proposed_end_date=$NEWEND --data-urlencode additional_amount=1000000 --data-urlencode review_comment=1주추가
 RV=$(q "SELECT MAX(review_id) FROM change_review WHERE cr_id=$CR")
 echo "-- PM 이 승인 시도 [기대: 403]"; curl -s -b "$T/pm01" -o /dev/null -w "%{http_code}\n" -d "review_id=$RV&decision=APPROVED" "$B/changes/$CR/decision"
 echo "-- 승인 전 고객 동의 [기대: BR-22 거부]"; post pm01 /changes/$CR/consent -d "review_id=$RV&contact_id=$C&consent_date=2026-10-21&consent=AGREED"
 echo "-- 승인 전 반영 [기대: BR-23 거부]"; post pm01 /changes/$CR/apply -d "review_id=$RV"
 post ceo /changes/$CR/decision --data-urlencode review_id=$RV --data-urlencode decision=APPROVED --data-urlencode decision_reason=e2e승인
-OTHER=$(q "SELECT contact_id FROM client_contact WHERE client_id<>(SELECT client_id FROM project WHERE project_id=15) LIMIT 1")
+OTHER=$(q "SELECT contact_id FROM client_contact WHERE client_id<>(SELECT client_id FROM project WHERE project_id=$PM_INPROG) LIMIT 1")
 echo "-- 다른 발주처 담당자로 동의 [기대: BR-22 거부]"; post pm01 /changes/$CR/consent -d "review_id=$RV&contact_id=$OTHER&consent_date=2026-10-21&consent=AGREED"
 post pm01 /changes/$CR/consent -d "review_id=$RV&contact_id=$C&consent_date=2026-10-21&consent=AGREED" --data-urlencode consent_evidence=이메일회신
 post pm01 /changes/$CR/apply -d "review_id=$RV"
 echo "-- 같은 검토안 재반영 [기대: BR-23 거부]"; post pm01 /changes/$CR/apply -d "review_id=$RV"
-q "SELECT cr_no, status FROM change_request WHERE cr_id=$CR; SELECT before_end_date, after_end_date, before_amount, after_amount FROM change_history WHERE review_id=$RV; SELECT end_date, contract_amount FROM project WHERE project_id=15"
+q "SELECT cr_no, status FROM change_request WHERE cr_id=$CR; SELECT before_end_date, after_end_date, before_amount, after_amount FROM change_history WHERE review_id=$RV; SELECT end_date, contract_amount FROM project WHERE project_id=$PM_INPROG"
 
 echo "== 10. [시나리오 A] 위반 사례"
-echo "-- 종료 프로젝트에 변경요청 [기대: BR-16 거부]"; C14=$(q "SELECT contact_id FROM client_contact WHERE client_id=(SELECT client_id FROM project WHERE project_id=14) LIMIT 1")
-post pm01 /projects/14/changes --data-urlencode contact_id=$C14 --data-urlencode request_date=2026-10-20 --data-urlencode title=x --data-urlencode content=x
-echo "-- 다른 발주처 담당자의 요청 [기대: BR-17 거부]"; post pm01 /projects/15/changes --data-urlencode contact_id=$OTHER --data-urlencode request_date=2026-10-20 --data-urlencode title=x --data-urlencode content=x
+echo "-- 종료 프로젝트에 변경요청 [기대: BR-16 거부]"; C14=$(q "SELECT contact_id FROM client_contact WHERE client_id=(SELECT client_id FROM project WHERE project_id=$PM_DONE) LIMIT 1")
+post pm01 /projects/$PM_DONE/changes --data-urlencode contact_id=$C14 --data-urlencode request_date=2026-10-20 --data-urlencode title=x --data-urlencode content=x
+echo "-- 다른 발주처 담당자의 요청 [기대: BR-17 거부]"; post pm01 /projects/$PM_INPROG/changes --data-urlencode contact_id=$OTHER --data-urlencode request_date=2026-10-20 --data-urlencode title=x --data-urlencode content=x
 echo "-- 투입보다 이른 종료예정일 반영 [기대: BR-23 거부]"
-post pm01 /projects/15/changes --data-urlencode contact_id=$C --data-urlencode request_date=2026-10-20 --data-urlencode title=e2e일정단축 --data-urlencode content=조기종료요청
-CR2=$(q "SELECT MAX(cr_id) FROM change_request"); EARLY=$(q "SELECT DATE_ADD(start_date, INTERVAL 30 DAY) FROM project WHERE project_id=15")
+post pm01 /projects/$PM_INPROG/changes --data-urlencode contact_id=$C --data-urlencode request_date=2026-10-20 --data-urlencode title=e2e일정단축 --data-urlencode content=조기종료요청
+CR2=$(q "SELECT MAX(cr_id) FROM change_request"); EARLY=$(q "SELECT DATE_ADD(start_date, INTERVAL 30 DAY) FROM project WHERE project_id=$PM_INPROG")
 post pm01 /changes/$CR2/reviews --data-urlencode proposed_end_date=$EARLY --data-urlencode additional_amount=-1000000
 RV2=$(q "SELECT MAX(review_id) FROM change_review WHERE cr_id=$CR2")
 curl -s -b "$T/ceo" -o /dev/null -d "review_id=$RV2&decision=APPROVED" "$B/changes/$CR2/decision"

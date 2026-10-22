@@ -100,6 +100,18 @@ UPDATE developer SET skill_grade = '중급' WHERE emp_id = @junior;
 SELECT emp_id, old_grade, new_grade, changed_by_emp_id, reason FROM grade_history WHERE emp_id = @junior ORDER BY history_id DESC LIMIT 1;
 
 -- ---------------------------------------------------------------------
+-- [BR-30] 직원 슈퍼타입-서브타입 (판별자 일치 · 배타)
+-- ---------------------------------------------------------------------
+SET @st30 := (SELECT emp_id FROM staff WHERE department = 'RND' LIMIT 1);
+SET @dv30 := (SELECT emp_id FROM developer LIMIT 1);
+SELECT '[BR-30] 지원직 직원에게 개발자 서브타입 추가 → 거부' AS test;
+INSERT INTO developer (emp_id, skill_grade, career_start_date) VALUES (@st30, '초급', CURDATE());
+SELECT '[BR-30] 개발자 직원에게 지원직 서브타입 추가 → 거부' AS test;
+INSERT INTO staff (emp_id, department) VALUES (@dv30, 'RND');
+SELECT '[BR-30] 서브타입이 있는 직원의 구분 변경 → 거부' AS test;
+UPDATE employee SET emp_type = 'STAFF' WHERE emp_id = @dv30;
+
+-- ---------------------------------------------------------------------
 -- [조별 특화 시나리오 A] 변경요청 규칙 (BR-16 ~ BR-23)
 -- ---------------------------------------------------------------------
 SET @cr_prj := (SELECT project_id FROM change_request WHERE status = 'REVIEWING' ORDER BY cr_id LIMIT 1);

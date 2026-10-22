@@ -101,6 +101,8 @@ role = {"trg_employee_bi": "사번 자동 채번 (BR-02)", "trg_project_bi": "�
         "trg_evaluation_bi": "평가 등록 검증 (BR-08,09)", "trg_customer_eval_bi": "고객 평가 검증 (BR-10,11,12)",
         "trg_pm_eval_bi": "PM 평가 검증 (BR-10,13)", "trg_peer_eval_bi": "동료 평가 검증 (BR-10,14)",
         "trg_developer_bu": "등급 변경일 갱신 (BR-15)", "trg_developer_au": "등급 변경 이력 기록 (BR-15)",
+        "trg_developer_bi": "개발자 서브타입 = 판별자 DEV, 지원직과 배타 (BR-30)", "trg_staff_bi": "지원직 서브타입 = 판별자 STAFF, 개발자와 배타 (BR-30)",
+        "trg_employee_bu": "서브타입이 있는 직원의 판별자 변경 금지 (BR-30)",
         "trg_change_request_bi": "변경요청 검증·요청번호 채번 (BR-16,17,18)", "trg_change_review_bi": "검토안 등록 검증 (BR-18,19,21,22)",
         "trg_change_review_bu": "검토안 결정·동의 검증, 결정 후 수정 금지 (BR-19~22)", "trg_change_review_ai": "요청 상태 갱신",
         "trg_change_review_au": "요청 상태 갱신", "trg_change_history_bi": "반영 가능 여부 검증 (BR-19,23)",

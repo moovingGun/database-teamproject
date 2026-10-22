@@ -78,6 +78,7 @@ ROLES = [  # role_id, code, name, min_grade, sort
     (4, "DESIGNER", "설계자", "중급", 4),
     (5, "PROGRAMMER", "프로그래머", "초급", 5),
     (6, "TESTER", "테스터", "초급", 6),
+    (7, "ARCHITECT", "아키텍트", "고급", 7),     # [Partial 예시] 신설 직무, 아직 투입 없음
 ]
 GRADE_LEVEL = {"초급": 1, "중급": 2, "고급": 3, "특급": 4}
 ROLE_MIN = {r[0]: GRADE_LEVEL[r[3]] for r in ROLES}
@@ -106,6 +107,15 @@ PROJECT_NAMES = [
     "통신 요금 정산 시스템 재구축", "HR 통합 시스템 구축", "데이터 거버넌스 체계 구축", "배송 추적 시스템 개발",
     "스마트그리드 운영 시스템 구축", "건강검진 예약 플랫폼 구축", "도서 추천 서비스 개발", "자금 관리 시스템 고도화",
     "커넥티드카 백엔드 플랫폼 구축", "통합 콜센터 시스템 구축", "마이데이터 연계 시스템 구축", "전자도서관 시스템 재구축",
+    "포인트 통합 관리 시스템 구축", "공공 데이터 개방 포털 구축", "차량 관제 시스템 고도화", "전자계약 플랫폼 구축",
+    "사내 그룹웨어 재구축", "주문 관리 시스템(OMS) 구축", "재고 최적화 시스템 개발", "보험금 청구 자동화 시스템",
+    "대출 심사 시스템 고도화", "회원 통합 인증(SSO) 구축", "모바일 쿠폰 플랫폼 개발", "에너지 사용량 분석 시스템",
+    "정산 배치 시스템 재구축", "실시간 주문 모니터링 구축", "고객 상담 이력 분석 시스템", "제조 설비 예지보전 시스템",
+    "학사 행정 시스템 고도화", "병원 예약 모바일 앱 개발", "택배 기사 앱 개발", "부동산 시세 분석 서비스 개발",
+    "결제 대행(PG) 연동 고도화", "사내 교육(LMS) 플랫폼 구축", "통합 검색 엔진 구축", "인사 평가 시스템 고도화",
+    "공급망 협업 포털 구축", "디지털 문서 보관 시스템 구축", "신용카드 부정사용 탐지 시스템", "고객 VOC 관리 시스템 구축",
+    "온라인 강의 플랫폼 구축", "구독 결제 시스템 개발", "물류센터 자동화 연계 시스템", "전자세금계산서 시스템 고도화",
+    "콘텐츠 관리 시스템(CMS) 재구축", "API 게이트웨이 구축", "보안 취약점 관리 시스템 구축", "채용 관리 시스템 구축",
 ]
 
 COMMENTS = {
@@ -207,7 +217,11 @@ for g, n in (("특급", 1), ("고급", 2), ("중급", 2), ("초급", 2)):
 
 # 개발자 보유 기술 3~8개
 emp_skills = []
+# [Partial 예시] 가장 최근에 입사한 개발자는 아직 보유 기술을 등록하지 않음
+NO_SKILL_DEV = max((d for d in DEVS if d["emp_id"] not in (3, 4) and d["emp_id"] not in RESERVED), key=lambda d: d["hire"])["emp_id"]
 for e in DEVS:
+    if e["emp_id"] == NO_SKILL_DEV:
+        continue
     n = random.randint(3, 8)
     for name, _ in random.sample(SKILLS, n):
         years = round(min(random.uniform(0.5, 12), max(0.5, (TODAY - e["career_start"]).days / 365)), 1)
@@ -225,11 +239,13 @@ for i, (name, ind, addr) in enumerate(CLIENTS):
         contacts.append((cid, i + 1, cn, random.choice(POSITIONS), f"{rom}{cid}@{['kepco','hanbit','mirae','taeyang','hansung','skytel','onnuri','sejong','nhis','quick','krlogis','booknlife'][i]}.co.kr",
                          f"010-{random.randint(2000,9999)}-{random.randint(1000,9999)}", 1))
         cid += 1
+# [Partial 예시] 영업 중인 신규 발주처: 담당자 미등록, 수주 전이라 프로젝트 없음
+clients.append((len(CLIENTS) + 1, "그린에너지솔루션", "512-86-30417", "에너지", "울산광역시 남구 삼산로 120", "052-270-5100"))
 CONTACTS_BY_CLIENT = {}
 for c in contacts:
     CONTACTS_BY_CLIENT.setdefault(c[1], []).append(c[0])
 
-# --------------------------------------------------------------------- 프로젝트 28개
+# --------------------------------------------------------------------- 프로젝트 (종료 약 44 · 취소 2 · 진행 10 · 예정 4)
 projects = []  # dict(project_id, name, client, start, end, status, amount, desc)
 names = PROJECT_NAMES[:]
 random.shuffle(names)
@@ -241,12 +257,16 @@ def add_project(status, start, end):
                          amount=random.randint(3, 60) * 50_000_000,
                          desc="발주처 요구에 따른 " + ("신규 구축" if random.random() < 0.6 else "고도화") + " 프로젝트"))
     pid += 1
-for _ in range(12):                       # 종료
-    s = rdate(date(2024, 1, 1), date(2025, 11, 1)); add_project("COMPLETED", s, min(add_months(s, random.randint(4, 10)), date(2026, 8, 31)))
+d0 = date(2023, 7, 3)                     # 종료: 2023-07 ~ 2026-02 착수, 약 22일 간격 (과거에도 월평균 10개 정도 동시 수행)
+while d0 <= date(2026, 2, 10):
+    s = d0 + timedelta(days=random.randint(-4, 4))
+    add_project("COMPLETED", s, min(add_months(s, random.randint(4, 9)), date(2026, 9, 30)))
+    d0 += timedelta(days=22)
 for _ in range(2):                        # 취소
     s = rdate(date(2025, 1, 1), date(2025, 9, 1)); add_project("CANCELLED", s, add_months(s, random.randint(2, 4)))
 for _ in range(10):                       # 진행 중 (현재 시점 포함)
-    s = rdate(date(2026, 3, 1), date(2026, 10, 1)); add_project("IN_PROGRESS", s, add_months(s, random.randint(6, 12)))
+    s = rdate(date(2026, 3, 1), date(2026, 10, 1))     # 발표일(12/07)에도 진행 중이도록 종료예정일은 2027-01-15 이후
+    add_project("IN_PROGRESS", s, max(add_months(s, random.randint(6, 12)), date(2027, 1, 15) + timedelta(days=random.randint(0, 120))))
 for _ in range(4):                        # 예정
     s = rdate(date(2027, 1, 4), date(2027, 4, 1)); add_project("PLANNED", s, add_months(s, random.randint(4, 9)))
 projects.sort(key=lambda p: p["start"])
@@ -255,7 +275,10 @@ for i, p in enumerate(projects):          # 착수일 순으로 ID 재부여 (�
 PRJ = {p["project_id"]: p for p in projects}
 
 project_skills = []
+NO_SKILL_PRJ = max((p for p in projects if p["status"] == "PLANNED"), key=lambda p: p["start"])["project_id"]
 for p in projects:
+    if p["project_id"] == NO_SKILL_PRJ:            # [Partial 예시] 착수 전이라 요구 기술 미정
+        continue
     for name, _ in random.sample(SKILLS, random.randint(3, 6)):
         project_skills.append((p["project_id"], SKILL_ID[name], random.randint(2, 5)))
 
@@ -268,8 +291,13 @@ def max_rate(emp_id, s, e):
     pts = {s} | {b[0] for b in busy[emp_id] if s <= b[0] <= e}
     return max(sum(b[2] for b in busy[emp_id] if b[0] <= p <= b[1]) for p in pts)
 
-def available(emp, role_id, s, e, rate):
+DEMO_HOLD = {}   # emp_id -> [(start, end, project_id)] 데모 프로젝트 기간 (다른 프로젝트 배정 금지)
+def held(emp_id, s, e, pid_now):
+    return any(hs <= e and he >= s and hp != pid_now for hs, he, hp in DEMO_HOLD.get(emp_id, []))
+
+def available(emp, role_id, s, e, rate, pid_now=None):
     return (GRADE_LEVEL[emp["grade"]] >= ROLE_MIN[role_id] and emp["hire"] <= s
+            and not held(emp["emp_id"], s, e, pid_now)
             and not (emp["emp_id"] in RESERVED and e >= BENCH_FROM)
             and max_rate(emp["emp_id"], s, e) + rate <= 100)
 
@@ -280,9 +308,9 @@ def assign(p, emp, role_id, s, e, rate=100, note=None):
     busy[emp["emp_id"]].append((s, e, rate)); aid += 1
 
 def pick(p, role_id, s, e, rate=100, prefer=None):
-    cands = [EMP[prefer]] if prefer and available(EMP[prefer], role_id, s, e, rate) else []
+    cands = [EMP[prefer]] if prefer and available(EMP[prefer], role_id, s, e, rate, p["project_id"]) else []
     if not cands:
-        cands = [d for d in DEVS if available(d, role_id, s, e, rate)
+        cands = [d for d in DEVS if available(d, role_id, s, e, rate, p["project_id"])
                  and not any(a["project_id"] == p["project_id"] and a["emp_id"] == d["emp_id"]
                              and a["start"] <= e and a["end"] >= s for a in assignments)]
     if not cands:
@@ -332,19 +360,27 @@ for pi, *_rest, applied in CR_PLAN:              # 반영된 요청은 종료예
         p["orig_end"], p["orig_amount"] = p["end"], p["amount"]
         p["end"] = p["end"] + timedelta(days=ext)
         p["amount"] = p["amount"] + add
-PM01_COMPLETED = completed[-1]["project_id"]    # pm01 이 PM 인 종료 프로젝트 (가장 최근 종료)
+# pm01 이 PM 인 종료 프로젝트: pm01 의 진행 프로젝트 착수 전에 끝난 것 중 가장 최근 (두 기간이 겹치면 PM 을 겸할 수 없음)
+PM01_COMPLETED = max((c for c in completed if c["end"] < inprog[0]["start"] - timedelta(days=7)), key=lambda c: c["end"])["project_id"]
 PM01_INPROG = inprog[0]["project_id"]
 DEV01_INPROG = inprog[1]["project_id"]
+for _pid in (PM01_COMPLETED, PM01_INPROG):
+    DEMO_HOLD.setdefault(3, []).append((PRJ[_pid]["start"], PRJ[_pid]["end"], _pid))
+DEMO_HOLD.setdefault(4, []).append((PRJ[DEV01_INPROG]["start"], PRJ[DEV01_INPROG]["end"], DEV01_INPROG))
 
-for p in projects:
+for p in projects:                                  # 1차: 모든 프로젝트에 PM 부터 배정 (PM 없는 프로젝트가 생기지 않도록)
+    if p["status"] == "PLANNED":
+        continue
+    prefer_pm = 3 if p["project_id"] in (PM01_COMPLETED, PM01_INPROG) else None
+    pm = pick(p, 1, p["start"], p["end"], prefer=prefer_pm)
+    if pm: assign(p, pm, 1, p["start"], p["end"])
+
+for p in projects:                                  # 2차: 나머지 직무
     if p["status"] == "PLANNED":
         continue
     s, e = p["start"], p["end"]
     days = (e - s).days
     pct = lambda f: s + timedelta(days=int(days * f))
-    prefer_pm = 3 if p["project_id"] in (PM01_COMPLETED, PM01_INPROG) else None
-    pm = pick(p, 1, s, e, prefer=prefer_pm)
-    if pm: assign(p, pm, 1, s, e)
     pl = pick(p, 2, s, e)
     if pl: assign(p, pl, 2, s, e)
     is_inprog = p["status"] == "IN_PROGRESS"
@@ -354,7 +390,7 @@ for p in projects:
         if a: assign(p, a, 3, s, pct(0.5), rate, "분석 단계 투입" if rate == 100 else "분석 단계 50% 투입")
     d = pick(p, 4, pct(0.15), pct(0.7))                             # 설계자
     if d: assign(p, d, 4, pct(0.15), pct(0.7), 100, "설계 단계 투입")
-    n_prog = random.randint(2, 3) if is_inprog else random.randint(2, 5)
+    n_prog = random.randint(2, 3) if is_inprog else random.randint(2, 4)
     for i in range(n_prog):                                        # 프로그래머
         ps = s if i % 2 == 0 else pct(0.25)
         prefer = 4 if (p["project_id"] == DEV01_INPROG and i == 0) else None
@@ -463,6 +499,7 @@ COURSES = [  # (id, 이름, 분야, 관련 기술, 내용)
     (6, "AWS 클라우드 아키텍처", "TECH", "AWS", "VPC·EC2·RDS 구성과 운영 자동화"),
     (7, "테스트 자동화와 TDD", "QUALITY", "TDD", "단위·통합 테스트 자동화, 테스트 주도 개발 실습"),
     (8, "프로젝트 일정·위험 관리", "MGMT", None, "WBS 작성, 일정 관리, 위험 식별과 대응 계획"),
+    (9, "보안 코딩 실무", "QUALITY", "ISMS-P 보안", "시큐어 코딩 가이드와 취약점 점검 실습 (개설 예정, 일정 미정)"),  # [Partial 예시]
 ]
 SESSIONS = [  # (id, 과정, 시작, 종료, 장소, 정원)
     (1, 1, "2026-07-14 09:00:00", "2026-07-15 18:00:00", "본사 7층 교육장", 20),
@@ -485,6 +522,8 @@ SESSIONS = [  # (id, 과정, 시작, 종료, 장소, 정원)
     (18, 2, "2027-03-29 13:00:00", "2027-03-29 18:00:00", "온라인 (화상)", 30),
 ]
 TRAINER = next(e["emp_id"] for e in employees if e.get("trainer"))
+# [Partial 예시] 인사 데이터로 먼저 등록되고 아직 로그인 계정을 만들지 않은 연구개발 직원
+NO_ACCOUNT_EMP = max(e["emp_id"] for e in employees if e["type"] == "STAFF" and e["dept"] == "RND")
 ev_meta = {e[0]: (e[1], e[2]) for e in evaluations}            # eval_id -> (project, evaluatee)
 acc = {}
 for ev, item, score, _ in eval_details:
@@ -523,8 +562,10 @@ if not any(pl["course"] == 4 for pl in plans):     # 수료 기록 대기 데모
     pl = next(pl for pl in plans if pl["course"] in (3, 5, 6, 7, 8))
     pl["course"], pl["goal"] = 4, "SQL 튜닝 실무 역량 향상"
 # dev01 데모: 최근 수립된 의사소통 교육 계획, 아직 미신청
-plans.append(dict(plan_id=len(plans) + 1, emp=4, pid=4, course=1, goal="고객 요구사항 확인·전달 역량 향상",
-                  reason=f"{PRJ[4]['name']} 고객 평가에서 요구사항 확인 과정의 보완 필요 의견이 있음. 평가 점수만으로 판단하지 않고 의견 내용을 근거로 추천",
+DEV01_DONE = max((a["project_id"] for a in assignments if a["emp_id"] == 4 and PRJ[a["project_id"]]["status"] == "COMPLETED"),
+                 key=lambda x: PRJ[x]["start"])
+plans.append(dict(plan_id=len(plans) + 1, emp=4, pid=DEV01_DONE, course=1, goal="고객 요구사항 확인·전달 역량 향상",
+                  reason=f"{PRJ[DEV01_DONE]['name']} 고객 평가에서 요구사항 확인 과정의 보완 필요 의견이 있음. 평가 점수만으로 판단하지 않고 의견 내용을 근거로 추천",
                   created=date(2026, 10, 5), due=date(2027, 2, 28)))
 sess_by_course = {}
 for sid, cid, st, en, *_ in SESSIONS:
@@ -573,10 +614,12 @@ parts = [
     "",
     "-- 기준(코드) 데이터 ------------------------------------------------------",
     rows("job_role", ["role_id", "role_code", "role_name", "min_grade", "sort_order"], ROLES),
-    rows("skill", ["skill_id", "skill_name", "category"], [(i + 1, n, c) for i, (n, c) in enumerate(SKILLS)]),
-    rows("eval_item", ["item_id", "item_code", "item_name", "description", "weight"],
-         [(1, "WORK", "업무수행", "산출물 품질, 일정 준수, 문제 해결 능력", 1.00),
-          (2, "COMM", "커뮤니케이션 능력", "보고, 협업, 고객 응대 태도", 1.00)]),
+    rows("skill", ["skill_id", "skill_name", "category"], [(i + 1, n, c) for i, (n, c) in enumerate(SKILLS)]
+         + [(len(SKILLS) + 1, "Rust", "LANGUAGE"), (len(SKILLS) + 2, "LLM 애플리케이션", "TOOL")]),   # [Partial 예시] 보유자 없는 신규 기술
+    rows("eval_item", ["item_id", "item_code", "item_name", "description", "weight", "is_active"],
+         [(1, "WORK", "업무수행", "산출물 품질, 일정 준수, 문제 해결 능력", 1.00, 1),
+          (2, "COMM", "커뮤니케이션 능력", "보고, 협업, 고객 응대 태도", 1.00, 1),
+          (3, "QUALITY", "산출물 품질", "(신설 예정) 산출물 표준 준수와 결함 밀도 — 아직 평가에 쓰지 않음", 1.00, 0)]),
     rows("eval_type_weight", ["eval_type", "weight", "description"],
          [("CUSTOMER", 0.40, "고객 평가"), ("PM", 0.40, "PM 평가"), ("PEER", 0.20, "동료 평가")]),
     "",
@@ -592,7 +635,7 @@ parts = [
     rows("staff", ["emp_id", "department", "job_title", "is_training_manager"],
          [(e["emp_id"], e["dept"], e["title"], e.get("trainer", 0)) for e in employees if e["type"] == "STAFF"]),
     rows("user_account", ["emp_id", "login_id", "password_hash", "auth_role"],
-         [(e["emp_id"], e["login"], pw_hash, e["role"]) for e in employees]),
+         [(e["emp_id"], e["login"], pw_hash, e["role"]) for e in employees if e["emp_id"] != NO_ACCOUNT_EMP]),
     rows("employee_skill", ["emp_id", "skill_id", "proficiency", "years_used", "last_used_date"], emp_skills),
     "",
     "-- 프로젝트 : project_code 는 트리거가 자동 채번 ---------------------------------",
@@ -646,6 +689,7 @@ for p in projects:
 print("projects by status:", by_status)
 print("reserved (available now) devs:", sorted(RESERVED))
 print(f"change requests={len(change_requests)} reviews={len(change_reviews)} applied={len(change_histories)}")
+print(f"partial examples: no-skill dev={NO_SKILL_DEV}, no-account emp={NO_ACCOUNT_EMP}, no-skill project={NO_SKILL_PRJ}")
 from collections import Counter
 print(f"training: plans={len(plans)} enrollments={len(enrollments)} by status={dict(Counter(e[4] for e in enrollments))} "
       f"courses={dict(Counter(pl['course'] for pl in plans))} trainer={TRAINER} pending_completion={pending_done}")

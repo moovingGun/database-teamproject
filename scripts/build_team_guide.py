@@ -158,8 +158,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   <p class="lead">지금까지 구현한 내용을 화면과 스키마 그림으로 한눈에 봅니다. 기본 업무(인력·투입·평가)에 더해 팀원이 제안한 조별 특화 시나리오 두 개를 구현했습니다.</p>
   <div class="stats">
     <div class="stat"><b>28</b><span>테이블 (뷰 6)</span></div>
-    <div class="stat"><b>20</b><span>트리거 · 프로시저 5</span></div>
-    <div class="stat"><b>29</b><span>비즈니스 규칙 BR</span></div>
+    <div class="stat"><b>23</b><span>트리거 · 프로시저 5</span></div>
+    <div class="stat"><b>30</b><span>비즈니스 규칙 BR</span></div>
     <div class="stat"><b>39</b><span>화면·기능 라우트</span></div>
     <div class="stat"><b>8</b><span>데모 시나리오</span></div>
     <div class="stat"><b>4.0×</b><span>대표 질의 성능 개선</span></div>
@@ -207,9 +207,10 @@ docker compose up -d</code><button type="button" data-copy="git clone {REPO}.git
     <div class="card a"><h4><span class="tag a">시나리오 A</span>고객사 변경요청 승인</h4><p>PM 접수 → 검토안 → 경영진 승인 → 고객 동의 → 계획 반영. 변경 전후 종료예정일·계약금액을 이력으로 남깁니다.</p></div>
     <div class="card b"><h4><span class="tag b">시나리오 B</span>평가 기반 교육 이수</h4><p>교육 담당자가 평가 의견과 보유 기술을 보고 계획을 세우고, 직원이 추천 과정 일정에 신청, 종료 후 수료를 기록합니다.</p></div>
     <div class="card"><h4><span class="tag ok">10/26 제출</span>요구사항 정의서 (엑셀 양식)</h4><p>팀원 초안 양식에 URQ001~012, 확인 사항 20개(현재 구현안 제안 포함), 추적표 시트를 채웠습니다. <code>docs/01-1_요구사항정의서.xlsx</code></p></div>
-    <div class="card"><h4><span class="tag">설계</span>종료예정일과 실제 종료일 분리</h4><p>변경요청이 계약상 계획을 바꾸므로, 종료 처리 때 계획을 덮어쓰지 않도록 컬럼을 나눴습니다.</p></div>
+    <div class="card"><h4><span class="tag">설계</span>직원 서브타입 강제 (BR-30)</h4><p>평가처럼 직원도 판별자와 다른 서브타입, 개발자이면서 지원직인 데이터를 DB 가 거부합니다.</p></div>
+    <div class="card"><h4><span class="tag">데이터</span>과거 프로젝트 보강</h4><p>프로젝트 60개, 과거 월평균 동시 수행 10.1개로 "월평균 10개" 규모에 맞췄고, 관계마다 자식 없는 부모 예시를 넣었습니다.</p></div>
     <div class="card"><h4><span class="tag">문서</span>ERD 이미지 · 스크린샷 자동 생성</h4><p>DB 에서 ERD 를, 실제 앱에서 화면을 자동으로 만들어 보고서에 바로 씁니다.</p></div>
-    <div class="card"><h4><span class="tag">검증</span>점검 스크립트</h4><p>전 화면 점검, 쓰기 흐름 점검, DB 규칙 거부 27건을 스크립트 하나씩으로 돌릴 수 있습니다.</p></div>
+    <div class="card"><h4><span class="tag">검증</span>점검 스크립트</h4><p>전 화면 점검, 쓰기 흐름 점검, DB 규칙 거부 30건을 스크립트 하나씩으로 돌릴 수 있습니다.</p></div>
   </div>
 </section>
 
@@ -260,6 +261,7 @@ flowchart LR
   <div class="tbl"><table><thead><tr><th>번호</th><th>내용</th></tr></thead><tbody>
     <tr><td>BR-01~07</td><td>개발자만 투입, 프로젝트 기간 안, 중복 투입 금지, 같은 기간 투입률 합계 100% 이하, 같은 기간 PM 1명, 직무별 최소 등급</td></tr>
     <tr><td>BR-02 · 15</td><td>사번·프로젝트번호 자동 채번, 기술등급 변경 이력 자동 기록</td></tr>
+    <tr><td>BR-30</td><td>직원 서브타입은 판별자와 일치, 개발자·지원직 동시 불가, 서브타입이 있으면 직원 구분 변경 금지</td></tr>
     <tr><td>BR-08~14</td><td>평가는 종료 프로젝트·참여자만, 서브타입 일치, 고객 평가자는 발주처 담당자, 의뢰는 PM, 자기 평가 금지, 대상별 1건</td></tr>
     <tr><td><span class="tag a">A</span>BR-16~23</td><td>예정·진행 프로젝트만, 발주처 담당자, PM 만 접수·검토, 최신 차수만 처리, 결정 후 수정 금지, 경영진만 승인, 승인 후 고객 동의, 승인+동의 후 반영·중복 반영 금지·투입보다 이른 종료예정일 거부</td></tr>
     <tr><td><span class="tag b">B</span>BR-24~29</td><td>종료 프로젝트 참여자만 계획 대상, 교육 담당자만 수립, 추천 과정 일정만 신청, 중복 신청·정원 초과 금지, 시작 전 신청·취소, 종료 후 수료 기록</td></tr>

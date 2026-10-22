@@ -299,7 +299,7 @@ erDiagram
 
 | 가이드라인 | 반영 |
 |---|---|
-| "프로젝트 평가"와 "직원"은 슈퍼타입-서브타입 | **EMPLOYEE** → DEVELOPER / STAFF (판별자 `emp_type`, 배타적·전체 참여). **EVALUATION** → CUSTOMER_EVAL / PM_EVAL / PEER_EVAL (판별자 `eval_type`, 배타적·전체 참여). 서브타입 PK = 슈퍼타입 PK (1:1, ON DELETE CASCADE). 서브타입-판별자 불일치는 트리거(BR-10)로 차단 |
+| "프로젝트 평가"와 "직원"은 슈퍼타입-서브타입 | **EMPLOYEE** → DEVELOPER / STAFF (판별자 `emp_type`, 배타적·전체 참여). **EVALUATION** → CUSTOMER_EVAL / PM_EVAL / PEER_EVAL (판별자 `eval_type`, 배타적·전체 참여). 서브타입 PK = 슈퍼타입 PK (1:1, ON DELETE CASCADE). 서브타입-판별자 불일치와 서브타입 중복은 트리거로 차단 (평가 BR-10, 직원 BR-30) |
 | "발주처"는 별도 엔티티 | **CLIENT** (사업자등록번호 UK) + **CLIENT_CONTACT** 1:N. 고객 평가의 평가자는 CLIENT_CONTACT 를 참조하여 "고객이 평가한다" 를 데이터 모델로 표현 |
 | M:N 관계 지양 | 개발자–기술 → **EMPLOYEE_SKILL**, 프로젝트–기술 → **PROJECT_SKILL**, 개발자–프로젝트 → **ASSIGNMENT** (직무·기간·투입률을 가진 교차 엔티티로 승격). 시나리오 B 의 역량개선계획–교육일정 → **TRAINING_ENROLLMENT** (신청 상태·출석을 가진 교차 엔티티) |
 | 1:N 에서 Total:Total 지양 | 모든 1:N 의 1측을 Partial 로 설계 (§3) |
@@ -333,6 +333,8 @@ erDiagram
 | TRAINING_SESSION : TRAINING_ENROLLMENT | Partial | Total | 신청자가 없는 일정 |
 | SKILL : TRAINING_COURSE (FK NULL) | Partial | **Partial** | 의사소통 교육처럼 특정 기술과 무관한 과정 |
 | STAFF : DEVELOPMENT_PLAN | Partial | Total | 교육 담당자가 아닌 지원직 |
+
+**시드 데이터의 Partial 예시**: 위 모든 1:N 관계에 '자식이 없는 부모' 행이 하나 이상 있다(예: 담당자·프로젝트가 없는 신규 발주처 `그린에너지솔루션`, 보유자 없는 기술 `Rust`, 쓰이지 않은 직무 `아키텍트`, 일정이 없는 교육과정 `보안 코딩 실무`, 계정이 없는 직원, 요구 기술이 미정인 예정 프로젝트, 아직 쓰지 않는 평가 항목 `산출물 품질`). `scripts` 의 감사 쿼리로 확인 가능.
 
 슈퍼타입-서브타입(EMPLOYEE→DEVELOPER/STAFF, EVALUATION→3 서브타입)은 1:1 이며 "전체·배타" 참여가 설계 의도이다(모든 직원은 개발자 또는 지원직 중 하나).
 

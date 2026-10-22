@@ -19,6 +19,10 @@ SET NAMES utf8mb4;
 --   BR-13 PM 평가의 평가자는 프로젝트 PM, 자기 자신은 평가 불가, 피평가자당 1건
 --   BR-14 동료 평가의 평가자는 참여자, 자기 자신은 평가 불가, (평가자,피평가자)당 1건
 --   BR-15 기술등급 변경 시 이력 자동 기록
+--   BR-30 직원 서브타입은 판별자(emp_type)와 일치하고 배타적 (개발자이면서 지원직일 수 없음),
+--         서브타입 행이 있는 직원의 판별자는 바꿀 수 없음
+--         ※ '모든 직원은 서브타입을 반드시 가진다'(전체 참여)는 직원·서브타입을 한 트랜잭션으로 등록해 보장
+--           (MySQL 은 지연 제약을 지원하지 않아 행 단위 트리거로는 검사 불가 — 회원가입·시드가 같은 트랜잭션에서 등록)
 --   ── 조별 특화 시나리오 A: 고객사 변경요청 및 승인 관리 ──
 --   BR-16 변경요청은 예정·진행 중 프로젝트에만, 요청번호 자동 채번
 --   BR-17 요청한 담당자는 해당 프로젝트 발주처 소속
@@ -43,6 +47,9 @@ USE si_pms;
 DROP PROCEDURE IF EXISTS sp_next_seq;
 DROP PROCEDURE IF EXISTS sp_validate_assignment;
 DROP TRIGGER   IF EXISTS trg_employee_bi;
+DROP TRIGGER   IF EXISTS trg_employee_bu;
+DROP TRIGGER   IF EXISTS trg_developer_bi;
+DROP TRIGGER   IF EXISTS trg_staff_bi;
 DROP TRIGGER   IF EXISTS trg_project_bi;
 DROP TRIGGER   IF EXISTS trg_assignment_bi;
 DROP TRIGGER   IF EXISTS trg_assignment_bu;
@@ -91,6 +98,48 @@ BEGIN
   IF NEW.emp_no IS NULL OR NEW.emp_no = '' THEN
     CALL sp_next_seq('EMP_NO', YEAR(NEW.hire_date), v_seq);
     SET NEW.emp_no = CONCAT('E', DATE_FORMAT(NEW.hire_date, '%y'), LPAD(v_seq, 4, '0'));
+  END IF;
+END$$
+
+-- ---------------------------------------------------------------------
+-- [BR-30] 직원 슈퍼타입-서브타입: 판별자 일치 + 배타성
+-- ---------------------------------------------------------------------
+CREATE TRIGGER trg_developer_bi BEFORE INSERT ON developer FOR EACH ROW
+BEGIN
+  DECLARE v_type VARCHAR(10);
+  DECLARE v_cnt INT DEFAULT 0;
+  SELECT emp_type INTO v_type FROM employee WHERE emp_id = NEW.emp_id;
+  IF v_type <> 'DEV' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 직원 구분(emp_type)이 DEV 인 직원만 개발자 서브타입을 가질 수 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM staff WHERE emp_id = NEW.emp_id;
+  IF v_cnt > 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 이미 지원직인 직원은 개발자가 될 수 없습니다. (서브타입 배타)';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_staff_bi BEFORE INSERT ON staff FOR EACH ROW
+BEGIN
+  DECLARE v_type VARCHAR(10);
+  DECLARE v_cnt INT DEFAULT 0;
+  SELECT emp_type INTO v_type FROM employee WHERE emp_id = NEW.emp_id;
+  IF v_type <> 'STAFF' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 직원 구분(emp_type)이 STAFF 인 직원만 지원직 서브타입을 가질 수 있습니다.';
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM developer WHERE emp_id = NEW.emp_id;
+  IF v_cnt > 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 이미 개발자인 직원은 지원직이 될 수 없습니다. (서브타입 배타)';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_employee_bu BEFORE UPDATE ON employee FOR EACH ROW
+BEGIN
+  DECLARE v_cnt INT DEFAULT 0;
+  IF NEW.emp_type <> OLD.emp_type THEN
+    SELECT (SELECT COUNT(*) FROM developer WHERE emp_id = OLD.emp_id) + (SELECT COUNT(*) FROM staff WHERE emp_id = OLD.emp_id) INTO v_cnt;
+    IF v_cnt > 0 THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '[BR-30] 서브타입이 등록된 직원의 구분(emp_type)은 바꿀 수 없습니다.';
+    END IF;
   END IF;
 END$$
 

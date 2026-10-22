@@ -122,12 +122,17 @@ def main():
         p.js("""document.getElementById('login_id').value='dev01'; checkId();""")
         time.sleep(0.6); p.shot("02_signup_dup", height=900)
 
+        pm_inprog = q("SELECT a.project_id FROM assignment a JOIN job_role r USING(role_id) JOIN project p USING(project_id) WHERE a.emp_id=3 AND r.role_code='PM' AND p.status='IN_PROGRESS' LIMIT 1")
+        pm_done = q("SELECT a.project_id FROM assignment a JOIN job_role r USING(role_id) JOIN project p USING(project_id) WHERE a.emp_id=3 AND r.role_code='PM' AND p.status='COMPLETED' LIMIT 1")
+        other_inprog = q(f"SELECT project_id FROM project WHERE status='IN_PROGRESS' AND project_id<>{pm_inprog} ORDER BY start_date LIMIT 1")
+        evaled = q("SELECT project_id FROM evaluation WHERE status<>'REQUESTED' GROUP BY project_id ORDER BY COUNT(*) DESC LIMIT 1")
+
         print("[경영진 ceo]")
         p.login("ceo")
         p.go("/"); p.shot("10_exec_dashboard")
         p.go("/projects"); p.shot("11_projects", height=1100)
-        p.go("/projects/15"); p.shot("12_project_detail")
-        p.go("/projects/16")   # pm01(박태양)은 같은 기간 P2026-001 에 100% 투입 중 → 50% 추가 시 BR-05
+        p.go(f"/projects/{pm_inprog}"); p.shot("12_project_detail")
+        p.go(f"/projects/{other_inprog}")   # pm01 은 같은 기간 자기 프로젝트에 100% 투입 중 → 50% 추가 시 BR-05
         p.js("""const f=document.querySelector('form[action$="/assignments"]');
                 f.querySelector('[name=emp_id]').value='3'; f.querySelector('[name=role_id]').value='5';
                 f.querySelector('[name=participation_rate]').value='50'; f.submit();""", wait_nav=True)
@@ -135,23 +140,23 @@ def main():
         p.go("/reports/staffing?date=2025-06-01"); p.shot("14_staffing_at_date")
         p.go("/employees?emp_type=DEV&skill_id=10&available_on=2026-11-01"); p.shot("15_employee_search", height=1100)
         p.go("/employees/3"); p.shot("16_employee_detail")
-        p.go("/reports/evaluations?project_id=1"); p.shot("17_eval_report")
+        p.go(f"/reports/evaluations?project_id={evaled}"); p.shot("17_eval_report")
         p.go("/reports/incentive?year=2025"); p.shot("18_incentive", height=1200)
         p.go("/reports/changes"); p.shot("30_change_report")
-        cr_pending = q("SELECT cr_id FROM change_request WHERE status='REVIEWING' AND project_id=15 LIMIT 1")
+        cr_pending = q(f"SELECT cr_id FROM change_request WHERE status='REVIEWING' AND project_id={pm_inprog} LIMIT 1")
         p.go(f"/changes/{cr_pending}"); p.shot("31_change_decision")
-        cr_applied = q("SELECT cr_id FROM change_request WHERE status='APPLIED' AND project_id=15 LIMIT 1")
+        cr_applied = q(f"SELECT cr_id FROM change_request WHERE status='APPLIED' AND project_id={pm_inprog} LIMIT 1")
         p.go(f"/changes/{cr_applied}"); p.shot("32_change_applied")
         p.go("/reports/training"); p.shot("40_training_report")
 
         print("[PM pm01]")
         p.login("pm01")
         p.go("/evaluations"); p.shot("20_eval_tasks")
-        target_emp = q("""SELECT a.emp_id FROM assignment a WHERE a.project_id=14 AND a.emp_id<>3
+        target_emp = q(f"""SELECT a.emp_id FROM assignment a WHERE a.project_id={pm_done} AND a.emp_id<>3
                           AND NOT EXISTS (SELECT 1 FROM evaluation ev JOIN pm_eval pe USING(eval_id)
-                                           WHERE ev.project_id=14 AND ev.evaluatee_emp_id=a.emp_id) LIMIT 1""")
-        p.go(f"/evaluations/new?project_id=14&eval_type=PM&evaluatee_emp_id={target_emp}"); p.shot("21_pm_eval_form")
-        p.go("/projects/15#changes"); p.shot("33_project_changes", anchor="#changes", height=1050)
+                                           WHERE ev.project_id={pm_done} AND ev.evaluatee_emp_id=a.emp_id) LIMIT 1""")
+        p.go(f"/evaluations/new?project_id={pm_done}&eval_type=PM&evaluatee_emp_id={target_emp}"); p.shot("21_pm_eval_form")
+        p.go(f"/projects/{pm_inprog}#changes"); p.shot("33_project_changes", anchor="#changes", height=1050)
 
         print("[발주처 담당자: 로그인 없음]")
         p.call("Network.clearBrowserCookies")
