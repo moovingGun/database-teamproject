@@ -467,20 +467,22 @@ COURSES = [  # (id, 이름, 분야, 관련 기술, 내용)
 SESSIONS = [  # (id, 과정, 시작, 종료, 장소, 정원)
     (1, 1, "2026-07-14 09:00:00", "2026-07-15 18:00:00", "본사 7층 교육장", 20),
     (2, 1, "2026-09-08 09:00:00", "2026-09-09 18:00:00", "본사 7층 교육장", 20),
-    (3, 1, "2026-11-17 09:00:00", "2026-11-18 18:00:00", "본사 7층 교육장", 20),
+    (3, 1, "2027-01-19 09:00:00", "2027-01-20 18:00:00", "본사 7층 교육장", 20),
     (4, 2, "2026-08-20 13:00:00", "2026-08-20 18:00:00", "온라인 (화상)", 30),
-    (5, 2, "2026-12-03 13:00:00", "2026-12-03 18:00:00", "온라인 (화상)", 30),
+    (5, 2, "2027-02-04 13:00:00", "2027-02-04 18:00:00", "온라인 (화상)", 30),
     (6, 3, "2026-07-20 09:00:00", "2026-07-24 18:00:00", "외부 교육기관 (강남)", 15),
-    (7, 3, "2026-11-23 09:00:00", "2026-11-27 18:00:00", "외부 교육기관 (강남)", 15),
+    (7, 3, "2027-01-25 09:00:00", "2027-01-29 18:00:00", "외부 교육기관 (강남)", 15),
     (8, 4, "2026-10-13 09:00:00", "2026-10-14 18:00:00", "본사 7층 교육장", 12),
-    (9, 4, "2026-12-08 09:00:00", "2026-12-09 18:00:00", "본사 7층 교육장", 12),
+    (9, 4, "2027-02-15 09:00:00", "2027-02-16 18:00:00", "본사 7층 교육장", 12),
     (10, 5, "2026-09-21 09:00:00", "2026-09-25 18:00:00", "외부 교육기관 (판교)", 15),
-    (11, 5, "2026-11-30 09:00:00", "2026-12-04 18:00:00", "외부 교육기관 (판교)", 15),
-    (12, 6, "2026-11-09 09:00:00", "2026-11-11 18:00:00", "AWS 교육센터", 20),
+    (11, 5, "2027-03-08 09:00:00", "2027-03-12 18:00:00", "외부 교육기관 (판교)", 15),
+    (12, 6, "2027-01-12 09:00:00", "2027-01-14 18:00:00", "AWS 교육센터", 20),
     (13, 7, "2026-08-11 09:00:00", "2026-08-12 18:00:00", "본사 7층 교육장", 15),
-    (14, 7, "2026-12-15 09:00:00", "2026-12-16 18:00:00", "본사 7층 교육장", 15),
+    (14, 7, "2027-02-22 09:00:00", "2027-02-23 18:00:00", "본사 7층 교육장", 15),
     (15, 8, "2026-09-15 09:00:00", "2026-09-16 18:00:00", "본사 대회의실", 10),
-    (16, 8, "2026-11-24 09:00:00", "2026-11-25 18:00:00", "본사 대회의실", 10),
+    (16, 8, "2027-03-15 09:00:00", "2027-03-16 18:00:00", "본사 대회의실", 10),
+    (17, 1, "2027-03-23 09:00:00", "2027-03-24 18:00:00", "본사 7층 교육장", 20),
+    (18, 2, "2027-03-29 13:00:00", "2027-03-29 18:00:00", "온라인 (화상)", 30),
 ]
 TRAINER = next(e["emp_id"] for e in employees if e.get("trainer"))
 ev_meta = {e[0]: (e[1], e[2]) for e in evaluations}            # eval_id -> (project, evaluatee)
@@ -509,28 +511,29 @@ for _, work, comm, pid, emp in cands:
         continue
     picked.add(emp)
     cid = course_for(emp, work, comm, len(plans))
-    created = min(PRJ[pid]["actual_end"] + timedelta(days=21), date(2026, 6, 30))
+    created = min(max(PRJ[pid]["actual_end"] + timedelta(days=21), date(2026, 3, 2) + timedelta(days=9 * len(plans))), date(2026, 6, 30))
     weak = "커뮤니케이션" if comm <= work else "업무수행"
     goal = {1: "고객 요구사항 확인·전달 역량 향상", 2: "보고서 작성과 보고 역량 향상", 8: "일정·위험 관리 역량 향상"}.get(
         cid, f"{COURSES[cid - 1][3]} 실무 역량 향상")
     reason = (f"{PRJ[pid]['name']} 평가에서 {weak} 평균 {min(work, comm):.1f}점. "
               + ("평가 의견에 요구사항 확인·전달 보완 필요 의견이 있음" if weak == "커뮤니케이션" else "담당 기술 영역의 산출물 재작업 의견이 있음"))
     plans.append(dict(plan_id=len(plans) + 1, emp=emp, pid=pid, course=cid, goal=goal, reason=reason,
-                      created=created, due=created + timedelta(days=180)))
+                      created=created, due=created + timedelta(days=240)))
 if not any(pl["course"] == 4 for pl in plans):     # 수료 기록 대기 데모: 업무수행 보완 대상 1명을 SQL 튜닝 과정으로
     pl = next(pl for pl in plans if pl["course"] in (3, 5, 6, 7, 8))
     pl["course"], pl["goal"] = 4, "SQL 튜닝 실무 역량 향상"
 # dev01 데모: 최근 수립된 의사소통 교육 계획, 아직 미신청
 plans.append(dict(plan_id=len(plans) + 1, emp=4, pid=4, course=1, goal="고객 요구사항 확인·전달 역량 향상",
                   reason=f"{PRJ[4]['name']} 고객 평가에서 요구사항 확인 과정의 보완 필요 의견이 있음. 평가 점수만으로 판단하지 않고 의견 내용을 근거로 추천",
-                  created=date(2026, 10, 5), due=date(2026, 12, 31)))
+                  created=date(2026, 10, 5), due=date(2027, 2, 28)))
 sess_by_course = {}
 for sid, cid, st, en, *_ in SESSIONS:
     sess_by_course.setdefault(cid, []).append((sid, st, en))
 enrollments, enid = [], 1
 def enroll(plan, sid, start, status, attended=None, processed=None, days_before=10):
     global enid
-    applied = datetime_str(date.fromisoformat(start[:10]) - timedelta(days=days_before))
+    applied_d = date.fromisoformat(start[:10]) - timedelta(days=days_before)
+    applied = datetime_str(min(applied_d, TODAY - timedelta(days=days_before)))   # 예정 일정은 오늘 이전에 신청
     enrollments.append((enid, plan["plan_id"], sid, applied, status, attended, processed)); enid += 1
 def datetime_str(d):
     return f"{d} 10:00:00"
@@ -550,7 +553,7 @@ for i, pl in enumerate(plans[:-1]):
         sid, st, en = past[-1]; enroll(pl, sid, st, "NOT_COMPLETED", 0, f"{en[:10]} 19:00:00")
         sid, st, _ = future[0]; enroll(pl, sid, st, "APPLIED", days_before=6)
     elif k == 4 and future:
-        sid, st, _ = future[0]; enroll(pl, sid, st, "CANCELLED", None, "2026-10-15 11:00:00", days_before=40)
+        sid, st, _ = future[0]; enroll(pl, sid, st, "CANCELLED", None, f"{TODAY - timedelta(days=4)} 11:00:00", days_before=12)
 
 # --------------------------------------------------------------------- 등급 변경 이력 (과거 승급 기록)
 grade_hist = []
