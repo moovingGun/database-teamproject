@@ -1,9 +1,12 @@
 """
 팀 공유 페이지 생성:  .venv/bin/python scripts/build_team_guide.py  →  docs/팀가이드.html
 이미지는 상대 경로(screenshots/, erd/)로 참조하므로 docs/ 폴더째 열면 그대로 보인다.
-아티팩트로 올릴 때는 같은 경로로 이미지 파일을 함께 올린다.
+공유 링크(아티팩트)·파일 전달용은 이미지를 HTML 안에 넣은 단일 파일로 만든다:
+  .venv/bin/python scripts/build_team_guide.py --inline <출력경로.html>
 """
+import base64
 import html
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -48,7 +51,7 @@ for f, _ in ERDS:
 e = html.escape
 group_name = dict(GROUPS)
 gallery = "\n".join(
-    f'<figure class="shot" data-g="{g}"><button type="button" class="thumb" data-src="screenshots/{f}.jpg" data-cap="{e(t)} — {e(d)}" '
+    f'<figure class="shot" data-g="{g}"><button type="button" class="thumb" data-cap="{e(t)} — {e(d)}" '
     f'aria-label="{e(t)} 크게 보기"><img src="screenshots/{f}.jpg" alt="{e(t)}" loading="lazy"></button>'
     f'<figcaption><span class="tag">{e(group_name[g])}</span><b>{e(t)}</b><span>{e(d)}</span></figcaption></figure>'
     for g, f, t, d in SHOTS)
@@ -337,7 +340,7 @@ flowchart LR
   document.getElementById('lbclose').addEventListener('click',close);
   lb.addEventListener('click',function(e){if(e.target===lb)close()});
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!lb.hidden)close()});
-  document.querySelectorAll('.thumb').forEach(function(b){b.addEventListener('click',function(){open(b.dataset.src,b.dataset.cap)})});
+  document.querySelectorAll('.thumb').forEach(function(b){b.addEventListener('click',function(){open(b.querySelector('img').src,b.dataset.cap)})});
   var erd=document.getElementById('erdimg'),erdcap=document.getElementById('erdcap');
   erd.addEventListener('click',function(){open(erd.getAttribute('src'),'ERD — '+erd.alt)});
   document.querySelectorAll('[data-erd]').forEach(function(b){b.addEventListener('click',function(){
@@ -352,6 +355,15 @@ flowchart LR
 })();
 </script>
 '''
-OUT.write_text(PAGE.replace("{REPO}", REPO).replace("{ERD_TABS}", erd_tabs).replace("{GROUP_TABS}", group_tabs)
-               .replace("{GALLERY}", gallery), encoding="utf-8")
+page = (PAGE.replace("{REPO}", REPO).replace("{ERD_TABS}", erd_tabs).replace("{GROUP_TABS}", group_tabs)
+        .replace("{GALLERY}", gallery))
+if len(sys.argv) == 3 and sys.argv[1] == "--inline":
+    # 공유용 단일 파일: 이미지를 data URI 로 넣어 HTML 하나만 있어도(링크 공유·파일 전달) 그림이 보이게 한다
+    for sub, ext, mime in (("screenshots", "jpg", "image/jpeg"), ("erd", "png", "image/png")):
+        for p in sorted((ROOT / "docs" / sub).glob(f"*.{ext}")):
+            uri = f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode()
+            page = page.replace(f'"{sub}/{p.name}"', f'"{uri}"')
+    assert '"screenshots/' not in page and '"erd/' not in page
+    OUT = Path(sys.argv[2])
+OUT.write_text(page, encoding="utf-8")
 print("wrote", OUT, OUT.stat().st_size // 1024, "KB")
