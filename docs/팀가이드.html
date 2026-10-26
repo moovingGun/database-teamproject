@@ -148,7 +148,7 @@ docker compose up -d</code><button type="button" data-copy="git clone https://gi
   <div class="grid2">
     <div class="card a"><h4><span class="tag a">시나리오 A</span>고객사 변경요청 승인</h4><p>PM 접수 → 검토안 → 경영진 승인 → 고객 동의 → 계획 반영. 변경 전후 종료예정일·계약금액을 이력으로 남깁니다.</p></div>
     <div class="card b"><h4><span class="tag b">시나리오 B</span>평가 기반 교육 이수</h4><p>교육 담당자가 평가 의견과 보유 기술을 보고 계획을 세우고, 직원이 추천 과정 일정에 신청, 종료 후 수료를 기록합니다.</p></div>
-    <div class="card"><h4><span class="tag ok">10/26 제출</span>요구사항 정의서 (엑셀 양식)</h4><p>팀원 초안 양식에 URQ001~010(Problem Description 만),확인 사항 20개와 결정 내용, 추적표 시트를 채웠습니다. <code>docs/01-1_요구사항정의서.xlsx</code></p></div>
+    <div class="card"><h4><span class="tag ok">10/26 제출</span>요구사항 정의서 (엑셀 양식)</h4><p>교수님 예시 양식 그대로 URQ001~010(Problem Description 만)을 채웠습니다. <code>docs/01-1_요구사항정의서.xlsx</code> · 확인 사항 24개·결정 내용·추적표는 11/09용 <code>docs/01-2_팀확인사항_추적표.xlsx</code></p></div>
     <div class="card"><h4><span class="tag">설계</span>직원 서브타입 강제 (BR-30)</h4><p>평가처럼 직원도 판별자와 다른 서브타입, 개발자이면서 지원직인 데이터를 DB 가 거부합니다. 앱 계정은 등록 프로시저로만 직원을 만들 수 있어 서브타입 없는 직원도 생기지 않습니다.</p></div>
     <div class="card"><h4><span class="tag">데이터</span>과거 프로젝트 보강</h4><p>프로젝트 60개, 과거 월평균 동시 수행 10.1개로 "월평균 10개" 규모에 맞췄고, 관계마다 자식 없는 부모 예시를 넣었습니다.</p></div>
     <div class="card"><h4><span class="tag">문서</span>ERD 이미지 · 스크린샷 자동 생성</h4><p>DB 에서 ERD 를, 실제 앱에서 화면을 자동으로 만들어 보고서에 바로 씁니다.</p></div>
@@ -232,7 +232,7 @@ flowchart LR
     <tr><td><span class="tag b">B</span>BR-24~29</td><td>종료 프로젝트 참여자만 계획 대상, 교육 담당자만 수립, 추천 과정 일정만 신청, 중복 신청·정원 초과 금지, 시작 전 신청·취소, 종료 후 수료 기록</td></tr>
   </tbody></table></div>
   <pre class="cmd"><code>docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 --force si_pms &lt; db/demo/constraint_tests.sql</code><button type="button" data-copy="docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 --force si_pms &lt; db/demo/constraint_tests.sql">복사</button></pre>
-  <div class="note">평가 가중치(고객 40 · PM 40 · 동료 20), 등급 기준, 인센티브 지급률, 직무별 최소 등급은 가정값입니다. 결정 내용은 엑셀 '팀 확인 필요 사항' 시트에 정리했습니다.</div>
+  <div class="note">평가 가중치(고객 40 · PM 40 · 동료 20), 등급 기준, 인센티브 지급률, 직무별 최소 등급은 가정값입니다. 결정 내용은 <code>docs/01-2_팀확인사항_추적표.xlsx</code> 의 '팀 확인 필요 사항' 시트에 정리했습니다.</div>
 </section>
 
 <section id="demo">
@@ -274,7 +274,7 @@ flowchart LR
   <h2>남은 일</h2>
   <div class="grid2">
     <div class="card"><h4>10/26 제출</h4><p>엑셀의 조 번호·팀원 정보를 확인하고 LMS 에 제출합니다.</p></div>
-    <div class="card"><h4>가정값 확인</h4><p>엑셀 확인 사항 20개의 결정 내용을 채웠습니다. 읽어 보고 이견이 있으면 알려 주세요.</p></div>
+    <div class="card"><h4>가정값 확인</h4><p>엑셀 확인 사항 24개의 결정 내용을 채웠습니다. 읽어 보고 이견이 있으면 알려 주세요.</p></div>
     <div class="card"><h4>시나리오 선택</h4><p>특화 시나리오 A·B 를 둘 다 낼지, 데모 시나리오를 몇 개 낼지 정합니다.</p></div>
   </div>
 </section>
