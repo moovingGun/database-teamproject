@@ -14,6 +14,7 @@
 | [`erd/03_eval.png`](erd/03_eval.png) | 프로젝트 평가 (슈퍼타입-서브타입) |
 | [`erd/04_chg.png`](erd/04_chg.png) | 조별 특화 시나리오 A · 변경요청 승인 |
 | [`erd/05_edu.png`](erd/05_edu.png) | 조별 특화 시나리오 B · 역량개선 · 교육 |
+| [`erd/06_full.png`](erd/06_full.png) | **전체 ERD 한 장** — 28개 테이블을 속성까지 모두 (보고서 첨부용, 가로형) |
 
 ![ERD 전체 개요](erd/00_overview.png)
 
