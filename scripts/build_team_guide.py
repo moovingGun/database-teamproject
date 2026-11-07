@@ -302,7 +302,7 @@ flowchart LR
   <h2>산출물과 일정</h2>
   <div class="timeline">
     <div class="tl"><div class="d">10/26 (월) · 10%</div><strong>분석 보고</strong><ul><li>요구사항 정의서 <code>01-1_요구사항정의서.xlsx</code></li><li>Problem Description 범위만</li></ul></div>
-    <div class="tl"><div class="d">11/09 (월) · 50%</div><strong>설계 보고</strong><ul><li>요구사항 확장판 + 특화 시나리오 <code>docs/01</code></li><li>ERD <code>docs/erd/</code>, 정의서 <code>docs/03</code>, CRUD <code>docs/04</code></li></ul></div>
+    <div class="tl"><div class="d">11/09 (월) · 50%</div><strong>설계 보고</strong><ul><li>요구사항 확장판 + 특화 시나리오 <code>docs/01</code></li><li>ERD <code>docs/erd/</code>, 정의서 <code>docs/03</code>, CRUD <code>docs/04</code></li><li>제출 양식(교수님 예시) <code>docs/03-2_표준용어-도메인-코드정의서.xlsx</code>, <code>docs/03-1_CRUD_매트릭스.xlsx</code></li></ul></div>
     <div class="tl"><div class="d">11/23 (월) · 20%</div><strong>구축 보고</strong><ul><li>생성·적재 스크립트 <code>db/init</code></li><li>증빙: 실행 결과, 스크린샷</li></ul></div>
     <div class="tl"><div class="d">12/07 (월) · 20%</div><strong>최종보고서</strong><ul><li>아키텍처, 데모 시나리오 <code>docs/05</code></li><li>성능 <code>docs/06</code>, 설계 결정 <code>docs/07</code></li></ul></div>
   </div>
