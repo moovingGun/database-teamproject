@@ -52,6 +52,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `.venv/bin/python scripts/gen_erd.py` | ERD 이미지 재생성 (`brew install graphviz` 필요) |
 | `.venv/bin/python scripts/gen_table_spec.py` | 테이블 정의서를 실제 DB 에서 재생성 |
 | `.venv/bin/python scripts/build_design_xlsx.py <예시 폴더> docs` | 11/09 제출용 표준용어·도메인·코드 정의서, CRUD 매트릭스 엑셀을 교수님 예시 양식에 생성 |
+| `./scripts/collect_submissions.sh` | 제출 파일만 `docs/제출물/` 에 일정별로 다시 모음 (원본 복사) |
 | `.venv/bin/python scripts/capture_screenshots.py` | 기능 화면 스크린샷 재촬영 (Chrome 필요) |
 | `.venv/bin/python scripts/gen_seed.py` | 시드 SQL 재생성 (고정 seed → 항상 같은 데이터) |
 
@@ -91,7 +92,7 @@ db/demo/      demo_scenarios.sql (S1~S8)   constraint_tests.sql (규칙 검증)
 db/perf/      perf_indexes.sql (성능 인덱스 비교)
 app/          auth · employees · projects · evaluations · reports · changes · training 블루프린트 + templates
 scripts/      시드·정의서·ERD·스크린샷·엑셀 생성기, smoke_test.sh · e2e_test.sh · perf_benchmark.py
-docs/         산출물 문서, erd/ (ERD 이미지), screenshots/ (기능 화면)
+docs/         산출물 문서, erd/ (ERD 이미지), screenshots/ (기능 화면), 제출물/ (일정별 제출 파일만 모음)
 ```
 
 ---
