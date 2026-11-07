@@ -178,3 +178,13 @@ for key, title, color, ts in AREAS:
     body += ["  " + x for sup in sups for x in category(sup, lr=True)]
     idx = [a for a, *_ in AREAS].index(key) + 1
     render(f"{idx:02d}_{key}", "\n".join(body))
+
+# 3) 전체 상세: 28개 테이블을 속성까지 모두 한 장에 (영역별 묶음). 보고서에 ERD 한 장으로 붙일 때 사용
+body = [f'  label="SI-PMS 전체 ERD — 테이블 {len(TCOM)}개 · 외래키 {len(FKS) + len(SUB_FKS)}개 (IE 표기){SUB_NOTE}"; labelloc=t; fontsize=16;']
+for key, title, color, ts in AREAS:
+    body.append(f'  subgraph cluster_{key} {{ label="{title}"; style="rounded,filled"; fillcolor="{color}55"; color="{color}"; fontsize=14;')
+    body += ["    " + node(t, True, color) for t in ts]
+    body += ["    " + x for sup in SUBTYPES if sup in ts for x in category(sup, lr=False)]
+    body.append("  }")
+body += ["  " + edge(f) for f in FKS]
+render("06_full", "\n".join(body), rankdir="TB", extra=", ranksep=0.8")   # 가로형(약 4:3) — 보고서 한 쪽에 붙이기 좋음
