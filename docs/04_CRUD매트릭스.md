@@ -1,6 +1,7 @@
 # CRUD Matrix (상관 모델링)
 
 > 2차 산출물. 행 = 업무 기능(프로세스, 구현 모듈), 열 = 엔티티. C 생성 · R 조회 · U 수정 · D 삭제.
+> 제출 양식(교수님 예시)은 [`03-1_CRUD_매트릭스.xlsx`](03-1_CRUD_매트릭스.xlsx) — 아래 두 표를 프로세스 36개 × 엔터티 28개 한 장으로 합친 것 (`scripts/build_design_xlsx.py`).
 > 모든 엔티티가 최소 1개 기능에서 C 되고 1개 이상에서 R 되는지(고아 엔티티 없음), 모든 기능이 1개 이상 엔티티를 사용하는지 검증하였다.
 
 | 기능 \ 엔티티 | CLIENT | CLIENT_CONTACT | EMPLOYEE | DEVELOPER | STAFF | USER_ACCOUNT | SKILL | EMPLOYEE_SKILL | PROJECT | PROJECT_SKILL | JOB_ROLE | ASSIGNMENT | EVALUATION | CUSTOMER_EVAL | PM_EVAL | PEER_EVAL | EVAL_ITEM | EVAL_DETAIL | EVAL_TYPE_WEIGHT | GRADE_HISTORY | SEQ_COUNTER |

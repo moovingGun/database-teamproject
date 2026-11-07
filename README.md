@@ -51,6 +51,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `docker exec -i si_pms_db mysql -uroot -proot1234 --default-character-set=utf8mb4 --force si_pms < db/demo/constraint_tests.sql` | 규칙 위반 거부 증빙 (ROLLBACK, 데이터 변경 없음) |
 | `.venv/bin/python scripts/gen_erd.py` | ERD 이미지 재생성 (`brew install graphviz` 필요) |
 | `.venv/bin/python scripts/gen_table_spec.py` | 테이블 정의서를 실제 DB 에서 재생성 |
+| `.venv/bin/python scripts/build_design_xlsx.py <예시 폴더> docs` | 11/09 제출용 표준용어·도메인·코드 정의서, CRUD 매트릭스 엑셀을 교수님 예시 양식에 생성 |
 | `.venv/bin/python scripts/capture_screenshots.py` | 기능 화면 스크린샷 재촬영 (Chrome 필요) |
 | `.venv/bin/python scripts/gen_seed.py` | 시드 SQL 재생성 (고정 seed → 항상 같은 데이터) |
 
@@ -206,6 +207,7 @@ S2 질의를 **투입 100만 건** 에서 세 조건으로 비교했습니다 (�
 | **10/26 (월)** | 분석 보고 10% | 요구사항 정의서 (Problem Description only, **제출 양식**) | [`docs/01-1_요구사항정의서.xlsx`](docs/01-1_요구사항정의서.xlsx) |
 | | | 분석 보고서 (설명 자료, 흐름도 포함) | [`docs/01_분석보고서.md`](docs/01_분석보고서.md) |
 | **11/09 (월)** | 설계 보고 50% | 요구사항 확장판 (가정 · 비즈니스 규칙 · **조별 특화 시나리오 A·B**) | [`docs/01_요구사항정의서.md`](docs/01_요구사항정의서.md) |
+| | | **제출 양식** · 표준용어·단어·코드·도메인 정의서, CRUD 매트릭스 (교수님 예시 양식) | [`docs/03-2_표준용어-도메인-코드정의서.xlsx`](docs/03-2_표준용어-도메인-코드정의서.xlsx), [`docs/03-1_CRUD_매트릭스.xlsx`](docs/03-1_CRUD_매트릭스.xlsx) |
 | | | E-R Diagram (IE 표기) | [`docs/erd/`](docs/erd/) 이미지, [`docs/02_ERD.md`](docs/02_ERD.md), [`docs/erd.dbml`](docs/erd.dbml) |
 | | | 데이터베이스 정의서 | [`docs/03_테이블정의서.md`](docs/03_테이블정의서.md) (DB 에서 자동 생성) |
 | | | CRUD Matrix | [`docs/04_CRUD매트릭스.md`](docs/04_CRUD매트릭스.md) |
@@ -253,6 +255,7 @@ S2 질의를 **투입 100만 건** 에서 세 조건으로 비교했습니다 (�
 - [x] **가정값 결정** — `docs/01-2_팀확인사항_추적표.xlsx` '팀 확인 필요 사항' 24개의 결정 내용(노란 칸) 기록. 팀원 공유 후 이견이 있으면 수정
 - [ ] **시나리오 선택** — 조원 수에 맞춰 데모 시나리오 선택 (S2 유지), 특화 시나리오 A·B 를 둘 다 둘지 결정
 - [x] **PM 평가의 공백** — PM 은 PM 평가 대상이 아님으로 결정 (시나리오 정의상 팀원만, 엑셀 Q13)
-- [ ] **보고서 양식** — 11/09 이후 산출물을 수업 양식으로 옮기기
+- [x] **보고서 양식 (11/09)** — 표준용어·도메인·코드 정의서, CRUD 매트릭스를 교수님 예시 양식 엑셀로 생성 (`docs/03-1`, `03-2`). ERD 는 양식 없음 → `docs/erd/*.png` 제출
+- [ ] **보고서 양식 (11/23·12/07)** — 구축·최종 보고서를 수업 양식으로 옮기기
 
 <sub>기술 스택: MySQL 8.0 (Docker) · Python 3 · Flask · PyMySQL · 서버 렌더링. 비밀번호는 PBKDF2-SHA256 해시, 주민등록번호는 화면 마스킹, 모든 쿼리는 파라미터 바인딩. 같은 내용의 HTML 버전: `docs/팀가이드.html`</sub>
